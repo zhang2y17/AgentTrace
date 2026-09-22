@@ -48,9 +48,7 @@ def _postgres_available() -> tuple[bool, str]:
     try:
         from sqlalchemy import create_engine, text
 
-        engine = create_engine(
-            url, connect_args={"connect_timeout": 3}, pool_pre_ping=False
-        )
+        engine = create_engine(url, connect_args={"connect_timeout": 3}, pool_pre_ping=False)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         engine.dispose()
@@ -225,9 +223,7 @@ class TestPostgresPersistence:
         from sqlalchemy import select
 
         remaining = (
-            session.execute(select(TraceEvent).where(TraceEvent.run_id == run_id))
-            .scalars()
-            .all()
+            session.execute(select(TraceEvent).where(TraceEvent.run_id == run_id)).scalars().all()
         )
         assert remaining == []
 

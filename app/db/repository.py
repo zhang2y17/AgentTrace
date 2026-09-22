@@ -93,9 +93,7 @@ class TraceRepository:
         try:
             return self.session.get(Run, run_id)
         except SQLAlchemyError as exc:
-            raise TracePersistenceError(
-                "查询 run 失败。", details={"run_id": run_id}
-            ) from exc
+            raise TracePersistenceError("查询 run 失败。", details={"run_id": run_id}) from exc
 
     def finalize_run(
         self,
@@ -124,9 +122,7 @@ class TraceRepository:
 
         run = self.get_run(run_id)
         if run is None:
-            raise TracePersistenceError(
-                "无法终结不存在的 run。", details={"run_id": run_id}
-            )
+            raise TracePersistenceError("无法终结不存在的 run。", details={"run_id": run_id})
 
         finished = ended_at or utcnow()
         run.status = status
@@ -299,9 +295,7 @@ class TraceRepository:
 
         event = self.session.get(TraceEvent, event_id)
         if event is None:
-            raise TracePersistenceError(
-                "无法关闭不存在的事件。", details={"event_id": event_id}
-            )
+            raise TracePersistenceError("无法关闭不存在的事件。", details={"event_id": event_id})
 
         finished = ended_at or utcnow()
         event.ended_at = finished
@@ -580,9 +574,9 @@ class TraceRepository:
             func.coalesce(func.sum(ModelCall.estimated_cost_usd), 0).label("cost"),
             # 布尔列求和：PostgreSQL 与 SQLite 都不支持直接 sum(bool)，
             # 因此转为 Integer 后取 max，等价于 any()。
-            func.coalesce(
-                func.max(cast(ModelCall.cost_estimation_unavailable, Integer)), 0
-            ).label("unavailable"),
+            func.coalesce(func.max(cast(ModelCall.cost_estimation_unavailable, Integer)), 0).label(
+                "unavailable"
+            ),
         ).where(ModelCall.run_id == run_id)
 
         try:

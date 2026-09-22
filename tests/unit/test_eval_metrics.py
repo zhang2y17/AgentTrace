@@ -188,9 +188,7 @@ class TestPercentile:
                     1,
                     min(
                         int(
-                            (Decimal(str(p)) * Decimal(n)).to_integral_value(
-                                rounding=ROUND_CEILING
-                            )
+                            (Decimal(str(p)) * Decimal(n)).to_integral_value(rounding=ROUND_CEILING)
                         ),
                         n,
                     ),
@@ -262,11 +260,7 @@ class TestRunSuccessRate:
             _outcome(status="failed"),
             _outcome(status="timeout"),
         ]
-        total = (
-            run_success_rate(outcomes)
-            + degraded_rate(outcomes)
-            + error_rate(outcomes)
-        )
+        total = run_success_rate(outcomes) + degraded_rate(outcomes) + error_rate(outcomes)
         assert total == pytest.approx(1.0)
 
     def test_timeout_counts_as_error(self) -> None:

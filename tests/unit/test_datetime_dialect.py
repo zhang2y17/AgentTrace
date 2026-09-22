@@ -41,7 +41,9 @@ class TestEnsureAware:
 
     def test_non_utc_aware_is_converted(self) -> None:
         """带其他时区的值会被转换到 UTC，而不是原样保留。"""
-        tz_plus8 = datetime(2026, 9, 22, 20, 0, 0, tzinfo=__import__("datetime").timezone(timedelta(hours=8)))
+        tz_plus8 = datetime(
+            2026, 9, 22, 20, 0, 0, tzinfo=__import__("datetime").timezone(timedelta(hours=8))
+        )
         result = ensure_aware(tz_plus8)
         assert result.tzinfo == UTC
         assert result.hour == 12
@@ -327,9 +329,7 @@ class TestUtcTimestampSerialization:
                 if isinstance(item, PlainSerializer):
                     return True
             # Optional[...] / Annotated 嵌套
-            return any(
-                _has_plain_serializer(arg, None) for arg in get_args(annotation)
-            )
+            return any(_has_plain_serializer(arg, None) for arg in get_args(annotation))
 
         def _is_annotated_datetime(annotation: object) -> bool:
             """递归判断注解里是否出现 ``datetime`` 类型。"""

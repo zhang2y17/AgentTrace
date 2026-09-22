@@ -36,7 +36,6 @@ def _coerce_utc(value: Any) -> Any:
     拒绝会让整个 API 在 SQLite 下不可用。
     """
     if isinstance(value, datetime) and value.tzinfo is None:
-
         return value.replace(tzinfo=UTC)
     return value
 

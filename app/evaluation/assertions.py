@@ -108,9 +108,7 @@ def extract_citations(answer: str) -> list[str]:
     return list(dict.fromkeys(_CITATION_RE.findall(answer)))
 
 
-def evaluate_assertions(
-    required: list[str], facts: CaseFacts
-) -> list[AssertionResult]:
+def evaluate_assertions(required: list[str], facts: CaseFacts) -> list[AssertionResult]:
     """按 ``required_assertions`` 逐条判定。
 
     未识别的断言名判 **失败** 而不是跳过：跳过会让一个拼错的
@@ -127,7 +125,9 @@ def evaluate_assertion(name: str, facts: CaseFacts) -> AssertionResult:  # noqa:
         if facts.citations:
             return AssertionResult(normalized, True)
         return AssertionResult(
-            normalized, False, f"答案中未找到 [doc-xxx] 形式的引用（answer_chars={facts.answer_chars}）"
+            normalized,
+            False,
+            f"答案中未找到 [doc-xxx] 形式的引用（answer_chars={facts.answer_chars}）",
         )
 
     if normalized == "has_evidence_section":
@@ -149,7 +149,9 @@ def evaluate_assertion(name: str, facts: CaseFacts) -> AssertionResult:  # noqa:
     if normalized == "status_is_succeeded":
         if facts.run_status == "succeeded":
             return AssertionResult(normalized, True)
-        return AssertionResult(normalized, False, f"run 终态为 {facts.run_status!r}，期望 'succeeded'")
+        return AssertionResult(
+            normalized, False, f"run 终态为 {facts.run_status!r}，期望 'succeeded'"
+        )
 
     if normalized == "status_is_failed":
         if facts.run_status == "failed":

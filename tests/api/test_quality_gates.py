@@ -60,9 +60,7 @@ class TestGateResponseShape:
         "要回去改 Agent"与"要改调用代码"，而这两件事的处置完全不同。
         结论由响应体的 ``passed`` 承载。
         """
-        response = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"min": 1.01}}
-        )
+        response = _check(client, evaluation_id, thresholds={"run_success_rate": {"min": 1.01}})
 
         assert response.status_code == 200, response.text
         assert response.json()["passed"] is False
@@ -100,9 +98,7 @@ class TestGateResponseShape:
 
 class TestGateVerdicts:
     def test_passing_thresholds(self, client: TestClient, evaluation_id: str) -> None:
-        body = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"min": 0.0}}
-        ).json()
+        body = _check(client, evaluation_id, thresholds={"run_success_rate": {"min": 0.0}}).json()
 
         assert body["passed"] is True
         assert body["blocked"] is False
@@ -115,9 +111,7 @@ class TestGateVerdicts:
 
         只给一个的话，使用者无法判断差多远 —— 是差一点点还是根本没跑对。
         """
-        body = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"min": 1.01}}
-        ).json()
+        body = _check(client, evaluation_id, thresholds={"run_success_rate": {"min": 1.01}}).json()
 
         assert len(body["violations"]) == 1
         violation = body["violations"][0]
@@ -169,9 +163,7 @@ class TestThresholdSnapshot:
         self, client: TestClient, evaluation_id: str
     ) -> None:
         """门禁结论要带**阈值快照**，这样阈值后来被改了也能复现判定。"""
-        body = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"min": 0.42}}
-        ).json()
+        body = _check(client, evaluation_id, thresholds={"run_success_rate": {"min": 0.42}}).json()
 
         assert body["thresholds"]["run_success_rate"]["min"] == 0.42
 
@@ -179,9 +171,7 @@ class TestThresholdSnapshot:
         self, client: TestClient, evaluation_id: str
     ) -> None:
         """快照是值拷贝。若只是引用，后续任何改动都会篡改历史记录。"""
-        first = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"min": 0.42}}
-        ).json()
+        first = _check(client, evaluation_id, thresholds={"run_success_rate": {"min": 0.42}}).json()
 
         second = _check(
             client, evaluation_id, thresholds={"run_success_rate": {"min": 0.99}}
@@ -197,28 +187,20 @@ class TestThresholdValidation:
 
         静默忽略会让门禁"通过" —— 而它其实一个阈值都没检查。
         """
-        response = _check(
-            client, evaluation_id, thresholds={"no_such_metric": {"min": 0.5}}
-        )
+        response = _check(client, evaluation_id, thresholds={"no_such_metric": {"min": 0.5}})
 
         assert response.status_code == 400, response.text
         _assert_error_shape(response.json(), "INVALID_ARGUMENT")
 
-    def test_max_on_ratio_metric_returns_400(
-        self, client: TestClient, evaluation_id: str
-    ) -> None:
+    def test_max_on_ratio_metric_returns_400(self, client: TestClient, evaluation_id: str) -> None:
         """比率型指标只接受 ``min``。"""
-        response = _check(
-            client, evaluation_id, thresholds={"run_success_rate": {"max": 0.9}}
-        )
+        response = _check(client, evaluation_id, thresholds={"run_success_rate": {"max": 0.9}})
 
         assert response.status_code == 400, response.text
         details = response.json()["error"]["details"]
         assert details.get("expected_operator") == "min"
 
-    def test_min_and_max_together_returns_400(
-        self, client: TestClient, evaluation_id: str
-    ) -> None:
+    def test_min_and_max_together_returns_400(self, client: TestClient, evaluation_id: str) -> None:
         """同时给 ``min`` 与 ``max`` 是无意义的区间约束（比率已在 [0,1]）。"""
         response = _check(
             client,

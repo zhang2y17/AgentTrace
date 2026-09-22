@@ -36,8 +36,7 @@ logger = get_logger(__name__)
 
 # 门禁通过时对外声明的数据来源说明（契约 API_CONTRACT §9 示例末行）
 GATE_DATA_SOURCE_NOTE = (
-    "阈值判定基于离线评测结果，通过门禁仅表示满足本项目定义的离线质量基线，"
-    "不等于可生产发布。"
+    "阈值判定基于离线评测结果，通过门禁仅表示满足本项目定义的离线质量基线，不等于可生产发布。"
 )
 
 # 允许的运算符
@@ -386,8 +385,7 @@ def check_metric_invariants(metrics: dict[str, Any]) -> list[str]:
     error = metrics.get("error_rate")
     if m1 is not None and error is not None and error > (1 - m1) + 1e-9:
         violations.append(
-            f"error_rate ({error}) > 1 - run_success_rate ({1 - m1})："
-            "失败与成功是互斥口径"
+            f"error_rate ({error}) > 1 - run_success_rate ({1 - m1})：失败与成功是互斥口径"
         )
 
     return violations

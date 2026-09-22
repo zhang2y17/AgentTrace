@@ -218,9 +218,7 @@ class TestListEvents:
         total = run["counts"]["trace_events"]
         assert total >= 5
 
-        first = client.get(
-            f"/runs/{run['run_id']}/events", params={"limit": 2, "offset": 0}
-        ).json()
+        first = client.get(f"/runs/{run['run_id']}/events", params={"limit": 2, "offset": 0}).json()
         second = client.get(
             f"/runs/{run['run_id']}/events", params={"limit": 2, "offset": 2}
         ).json()
@@ -242,9 +240,7 @@ class TestListEvents:
         """
         run = _create_run(client)
 
-        body = client.get(
-            f"/runs/{run['run_id']}/events", params={"offset": 9999}
-        ).json()
+        body = client.get(f"/runs/{run['run_id']}/events", params={"offset": 9999}).json()
 
         assert body["count"] == 0
         assert body["events"] == []

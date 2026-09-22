@@ -116,9 +116,7 @@ class TestRunPersistence:
         assert fetched.question == "AgentTrace 如何记录工具调用？"
         assert fetched.id == run.id
 
-    def test_finalize_run_sets_terminal_state_and_duration(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_finalize_run_sets_terminal_state_and_duration(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         run = repository.create_run(
             question="test",
             status="running",
@@ -169,9 +167,7 @@ class TestTraceEventPersistence:
         db_session.commit()
         return run
 
-    def test_sequence_starts_at_one_and_increments(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_sequence_starts_at_one_and_increments(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         """D-04：sequence 严格递增、无重复。"""
         run = self._make_run(repository, db_session)
 
@@ -188,9 +184,7 @@ class TestTraceEventPersistence:
 
         assert sequences == [1, 2, 3, 4, 5]
 
-    def test_append_event_generates_prefixed_event_id(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_append_event_generates_prefixed_event_id(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         run = self._make_run(repository, db_session)
         event = repository.append_event(
             run_id=run.id, event_type="run", name="run", status="running"
@@ -202,15 +196,11 @@ class TestTraceEventPersistence:
         assert prefix == PREFIX_EVENT
         assert len(ulid_part) == 26
 
-    def test_parent_child_relationship_persists(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_parent_child_relationship_persists(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         """D-03：父子关系可正确落库与读回。"""
         run = self._make_run(repository, db_session)
 
-        parent = repository.append_event(
-            run_id=run.id, event_type="run", name="run", status="ok"
-        )
+        parent = repository.append_event(run_id=run.id, event_type="run", name="run", status="ok")
         child = repository.append_event(
             run_id=run.id,
             event_type="node",
@@ -223,9 +213,7 @@ class TestTraceEventPersistence:
         assert child.parent_event_id == parent.event_id
         assert child.run_id == parent.run_id
 
-    def test_close_event_sets_duration_and_status(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_close_event_sets_duration_and_status(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         """D-02：节点事件必须带耗时。"""
         run = self._make_run(repository, db_session)
         event = repository.append_event(
@@ -236,9 +224,7 @@ class TestTraceEventPersistence:
         assert event.ended_at is None
         assert event.duration_ms is None
 
-        repository.close_event(
-            event.event_id, status="ok", output_summary={"intent": "explain"}
-        )
+        repository.close_event(event.event_id, status="ok", output_summary={"intent": "explain"})
         db_session.commit()
 
         assert event.ended_at is not None
@@ -247,9 +233,7 @@ class TestTraceEventPersistence:
         assert event.status == "ok"
         assert "explain" in (event.output_summary or "")
 
-    def test_input_output_summaries_are_truncated(
-        self, repository, db_session
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_input_output_summaries_are_truncated(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         """G-05：摘要必须被截断，不能把完整内容写进库。"""
         run = self._make_run(repository, db_session)
         event = repository.append_event(
@@ -283,9 +267,7 @@ class TestTraceEventPersistence:
     def test_list_events_ordered_by_sequence(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         run = self._make_run(repository, db_session)
         for index in range(4):
-            repository.append_event(
-                run_id=run.id, event_type="node", name=f"n{index}", status="ok"
-            )
+            repository.append_event(run_id=run.id, event_type="node", name=f"n{index}", status="ok")
         db_session.commit()
 
         events, total = repository.list_events(run.id)
@@ -322,9 +304,7 @@ class TestTraceEventPersistence:
     def test_list_events_pagination(self, repository, db_session) -> None:  # type: ignore[no-untyped-def]
         run = self._make_run(repository, db_session)
         for index in range(10):
-            repository.append_event(
-                run_id=run.id, event_type="node", name=f"n{index}", status="ok"
-            )
+            repository.append_event(run_id=run.id, event_type="node", name=f"n{index}", status="ok")
         db_session.commit()
 
         page, total = repository.list_events(run.id, limit=3, offset=2)
@@ -427,9 +407,7 @@ class TestToolCallPersistence:
         db_session.commit()
 
         for name in ("search_documents", "get_document", "calculate_cost_summary"):
-            repository.record_tool_call(
-                run_id=run.id, node_name="n", tool_name=name, status="ok"
-            )
+            repository.record_tool_call(run_id=run.id, node_name="n", tool_name=name, status="ok")
         db_session.commit()
 
         calls = repository.list_tool_calls(run.id)
@@ -567,9 +545,7 @@ class TestCascadeBehavior:
         db_session.commit()
 
         repository.append_event(run_id=run.id, event_type="node", name="n", status="ok")
-        repository.record_tool_call(
-            run_id=run.id, node_name="n", tool_name="t", status="ok"
-        )
+        repository.record_tool_call(run_id=run.id, node_name="n", tool_name="t", status="ok")
         repository.record_model_call(
             run_id=run.id,
             node_name="n",

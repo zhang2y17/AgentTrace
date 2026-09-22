@@ -122,9 +122,7 @@ class TestReplayDoesNotMutateOriginal:
         after = client.get(f"/runs/{original['run_id']}/events").json()["total"]
         assert after == before, "回放往原 run 里追加了事件"
 
-    def test_original_status_unchanged_after_failed_replay_input(
-        self, client: TestClient
-    ) -> None:
+    def test_original_status_unchanged_after_failed_replay_input(self, client: TestClient) -> None:
         """即使回放**失败**，原 run 也不该被牵连。
 
         这条防的是一种真实的实现错误：把回放终态写回原 run。
@@ -198,9 +196,7 @@ class TestReplayFailures:
     """回放的错误路径。"""
 
     def test_unknown_run_returns_404(self, client: TestClient) -> None:
-        response = client.post(
-            "/runs/run_01JZZZZZZZZZZZZZZZZZZZZZZZ/replay", json={}
-        )
+        response = client.post("/runs/run_01JZZZZZZZZZZZZZZZZZZZZZZZ/replay", json={})
 
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "RUN_NOT_FOUND"

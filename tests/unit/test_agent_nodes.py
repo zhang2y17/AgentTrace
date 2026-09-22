@@ -291,9 +291,7 @@ class TestDocumentSearchNode:
                     raise RuntimeError("模拟读取失败")
                 return self._real.invoke(tool_name, args, **kwargs)
 
-        result = document_search(
-            _initial_state("证据不足时会怎么做？"), registry=_FailingGet()
-        )
+        result = document_search(_initial_state("证据不足时会怎么做？"), registry=_FailingGet())
         # 检索结果仍在，只是没有取回正文
         assert result["search_results"]
         assert result["fetched_documents"] == []
@@ -427,9 +425,7 @@ class TestAnswerWriter:
         assert result["citations"]
         assert result["visited_nodes"] == [NODE_ANSWER_WRITER]
 
-    def test_marks_degraded_when_evidence_insufficient(
-        self, provider: FakeLLMProvider
-    ) -> None:
+    def test_marks_degraded_when_evidence_insufficient(self, provider: FakeLLMProvider) -> None:
         """**关键语义**：证据不足时答案仍会产出，但必须标记降级。
 
         "跑完了"不等于"成功了"。降级完成的 run 不视为成功、
@@ -609,9 +605,7 @@ class TestFinalValidator:
             ),
             known_document_ids=None,
         )
-        assert any(
-            "hallucination_check_skipped" in e for e in result["validation_errors"]
-        )
+        assert any("hallucination_check_skipped" in e for e in result["validation_errors"])
 
     def test_degraded_takes_precedence_over_failed(self, known_ids: list[str]) -> None:
         """降级优先级高于失败。
@@ -851,9 +845,7 @@ class TestFailurePaths:
                 raise ToolExecutionError("模拟工具失败", details={"tool_name": tool_name})
 
         with pytest.raises(Exception) as exc_info:
-            document_search(
-                _initial_state("证据"), registry=_AlwaysFailingRegistry()
-            )
+            document_search(_initial_state("证据"), registry=_AlwaysFailingRegistry())
         assert "模拟工具失败" in str(exc_info.value)
 
     def test_node_span_context_manager_records_status(self, db_session: Any) -> None:
@@ -897,9 +889,10 @@ class TestFailurePaths:
         )
         recorder = TraceRecorder(repository)
 
-        with pytest.raises(RuntimeError), recorder.node(
-            run_id=run.id, name=NODE_DOCUMENT_SEARCH
-        ) as span:
+        with (
+            pytest.raises(RuntimeError),
+            recorder.node(run_id=run.id, name=NODE_DOCUMENT_SEARCH) as span,
+        ):
             span.fail(error_code="TOOL_EXECUTION_FAILED", output_summary="模拟节点失败")
             raise RuntimeError("boom")
 

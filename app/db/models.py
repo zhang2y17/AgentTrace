@@ -252,9 +252,7 @@ class ToolCall(Base):
     """
 
     __tablename__ = "tool_call"
-    __table_args__ = (
-        Index("ix_tool_call_run_tool", "run_id", "tool_name"),
-    )
+    __table_args__ = (Index("ix_tool_call_run_tool", "run_id", "tool_name"),)
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True)
     run_id: Mapped[str] = mapped_column(
@@ -270,9 +268,7 @@ class ToolCall(Base):
     )
 
     node_name: Mapped[str] = mapped_column(String(NAME_LENGTH), nullable=False)
-    tool_name: Mapped[str] = mapped_column(
-        String(TOOL_NAME_LENGTH), nullable=False, index=True
-    )
+    tool_name: Mapped[str] = mapped_column(String(TOOL_NAME_LENGTH), nullable=False, index=True)
     tool_version: Mapped[str] = mapped_column(
         String(STATUS_LENGTH), nullable=False, default="1.0.0"
     )
@@ -314,9 +310,7 @@ class ModelCall(Base):
     """
 
     __tablename__ = "model_call"
-    __table_args__ = (
-        Index("ix_model_call_run_model", "run_id", "model_name"),
-    )
+    __table_args__ = (Index("ix_model_call_run_model", "run_id", "model_name"),)
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True)
     run_id: Mapped[str] = mapped_column(
@@ -333,9 +327,7 @@ class ModelCall(Base):
 
     node_name: Mapped[str] = mapped_column(String(NAME_LENGTH), nullable=False)
     provider: Mapped[str] = mapped_column(String(PROVIDER_LENGTH), nullable=False)
-    model_name: Mapped[str] = mapped_column(
-        String(MODEL_NAME_LENGTH), nullable=False, index=True
-    )
+    model_name: Mapped[str] = mapped_column(String(MODEL_NAME_LENGTH), nullable=False, index=True)
     is_test_double: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -377,9 +369,7 @@ class EvalCase(Base):
     """
 
     __tablename__ = "eval_case"
-    __table_args__ = (
-        Index("ix_eval_case_dataset", "dataset_version"),
-    )
+    __table_args__ = (Index("ix_eval_case_dataset", "dataset_version"),)
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True)
     case_key: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
@@ -452,9 +442,7 @@ class EvalRun(Base):
     task_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     tool_selection_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     tool_argument_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    evidence_coverage: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 4), nullable=True
-    )
+    evidence_coverage: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
 
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -466,9 +454,7 @@ class EvalRun(Base):
 
     # 契约 EVALUATION §5.1：失败 case 必须能回答"为什么失败"
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    assertion_results: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JsonType, nullable=True
-    )
+    assertion_results: Mapped[list[dict[str, Any]] | None] = mapped_column(JsonType, nullable=True)
 
     created_at: Mapped[datetime] = created_at_column()
 
@@ -496,9 +482,7 @@ class QualityGate(Base):
     """
 
     __tablename__ = "quality_gate"
-    __table_args__ = (
-        Index("ix_quality_gate_evaluation", "evaluation_id"),
-    )
+    __table_args__ = (Index("ix_quality_gate_evaluation", "evaluation_id"),)
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True)
     evaluation_id: Mapped[str] = mapped_column(String(ID_LENGTH), nullable=False)

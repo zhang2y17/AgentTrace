@@ -376,7 +376,9 @@ class NodeSpan:
         """是否已写入结束状态。"""
         return self._settled
 
-    def succeed(self, *, output_summary: Any = None, attributes: dict[str, Any] | None = None) -> None:
+    def succeed(
+        self, *, output_summary: Any = None, attributes: dict[str, Any] | None = None
+    ) -> None:
         """标记节点成功结束。"""
         self._settle(
             status="ok", output_summary=output_summary, error_code=None, attributes=attributes
@@ -403,9 +405,7 @@ class NodeSpan:
             status="skipped", output_summary=reason, error_code=None, attributes=attributes
         )
 
-    def mark_handoff(
-        self, *, reason: Any = None, attributes: dict[str, Any] | None = None
-    ) -> None:
+    def mark_handoff(self, *, reason: Any = None, attributes: dict[str, Any] | None = None) -> None:
         """标记需要人工接管（自动流程到此为止）。"""
         self._settle(
             status="handoff", output_summary=reason, error_code=None, attributes=attributes

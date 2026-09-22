@@ -244,9 +244,7 @@ def evidence_coverage(outcomes: list[CaseOutcome]) -> float | None:
     """
     if not outcomes:
         return None
-    total = sum(
-        float(outcome.evidence_coverage or 0.0) for outcome in outcomes
-    )
+    total = sum(float(outcome.evidence_coverage or 0.0) for outcome in outcomes)
     return _round(_safe_ratio(total, len(outcomes)))
 
 
@@ -279,9 +277,7 @@ def latency_summary(outcomes: list[CaseOutcome]) -> dict[str, Any]:
     return {
         "latency_ms_p50": percentile(latencies, 0.50),
         "latency_ms_p95": percentile(latencies, 0.95),
-        "latency_ms_mean": (
-            _round(sum(latencies) / sample_size, 2) if sample_size else None
-        ),
+        "latency_ms_mean": (_round(sum(latencies) / sample_size, 2) if sample_size else None),
         "latency_sample_size": sample_size,
         # N < 5 时分位数几乎没有统计意义。标注而不是拒绝计算 ——
         # 不计算会让小规模评测完全失去延迟数据。

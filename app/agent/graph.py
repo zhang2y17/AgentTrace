@@ -215,7 +215,10 @@ def build_graph(deps: AgentDeps, *, checkpointer: Any | None = None) -> Any:
 
     logger.info(
         "agent_graph_compiled",
-        extra={"nodes": list(NODE_ORDER), "max_evidence_retries": deps.resolved_max_evidence_retries()},
+        extra={
+            "nodes": list(NODE_ORDER),
+            "max_evidence_retries": deps.resolved_max_evidence_retries(),
+        },
     )
     return compiled
 

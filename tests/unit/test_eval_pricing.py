@@ -59,9 +59,7 @@ class TestCostFormula:
 
     def test_negative_tokens_raise(self) -> None:
         with pytest.raises(ValueError):
-            estimate_cost(
-                model_name="gpt-4o", prompt_tokens=-1, completion_tokens=0, table=TABLE
-            )
+            estimate_cost(model_name="gpt-4o", prompt_tokens=-1, completion_tokens=0, table=TABLE)
 
 
 class TestDecimalPrecision:

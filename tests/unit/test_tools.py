@@ -514,9 +514,7 @@ class TestDocumentStoreSearch:
             "北京到上海的机票多少钱",
         ],
     )
-    def test_irrelevant_queries_return_no_hits(
-        self, store: DocumentStore, query: str
-    ) -> None:
+    def test_irrelevant_queries_return_no_hits(self, store: DocumentStore, query: str) -> None:
         """**关键断言**：与项目无关的查询必须返回空结果。
 
         没有分数门槛时，任何非空查询都能凑出 top_k 篇文档
@@ -664,22 +662,16 @@ class TestAnalyticsToolsMissingRun:
 
         tools = AnalyticsTools(session_factory=lambda: db_session)
         with pytest.raises(KeyError):
-            tools.calculate_latency_summary(
-                CalculateLatencySummaryArgs(run_id="run_nonexistent")
-            )
+            tools.calculate_latency_summary(CalculateLatencySummaryArgs(run_id="run_nonexistent"))
 
     def test_cost_summary_raises_for_unknown_run(self, db_session: Any) -> None:
         from app.tools.analytics import AnalyticsTools
 
         tools = AnalyticsTools(session_factory=lambda: db_session)
         with pytest.raises(KeyError):
-            tools.calculate_cost_summary(
-                CalculateCostSummaryArgs(run_id="run_nonexistent")
-            )
+            tools.calculate_cost_summary(CalculateCostSummaryArgs(run_id="run_nonexistent"))
 
-    def test_latency_summary_on_run_without_events(
-        self, db_session: Any, repository: Any
-    ) -> None:
+    def test_latency_summary_on_run_without_events(self, db_session: Any, repository: Any) -> None:
         """run 存在但没有任何 node 事件时，返回空统计而不是报错。"""
         from app.tools.analytics import AnalyticsTools
 
@@ -692,9 +684,7 @@ class TestAnalyticsToolsMissingRun:
             is_test_double=True,
         )
         tools = AnalyticsTools(session_factory=lambda: db_session)
-        summary = tools.calculate_latency_summary(
-            CalculateLatencySummaryArgs(run_id=run.id)
-        )
+        summary = tools.calculate_latency_summary(CalculateLatencySummaryArgs(run_id=run.id))
         assert summary.run_id == run.id
         assert summary.node_count == 0
         assert summary.tool_call_count == 0

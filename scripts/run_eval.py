@@ -75,9 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="评测后执行质量门禁；未通过时以退出码 1 结束",
     )
-    parser.add_argument(
-        "--gate-name", default="release-gate", help="门禁名称（默认 release-gate）"
-    )
+    parser.add_argument("--gate-name", default="release-gate", help="门禁名称（默认 release-gate）")
     parser.add_argument(
         "--threshold",
         action="append",
@@ -162,9 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     get_settings.cache_clear()
 
     case_keys = (
-        [item.strip() for item in args.cases.split(",") if item.strip()]
-        if args.cases
-        else None
+        [item.strip() for item in args.cases.split(",") if item.strip()] if args.cases else None
     )
 
     try:

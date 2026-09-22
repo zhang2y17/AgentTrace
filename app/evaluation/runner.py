@@ -183,7 +183,9 @@ class EvaluationResult:
     def failed_cases(self) -> int:
         return self.case_count - self.passed_cases
 
-    def to_dict(self, *, include_cases: bool = False, only_failures: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self, *, include_cases: bool = False, only_failures: bool = False
+    ) -> dict[str, Any]:
         """转成契约 API_CONTRACT §6/§7 的响应体。"""
         payload: dict[str, Any] = {
             "evaluation_id": self.evaluation_id,
@@ -420,9 +422,7 @@ class EvaluationRunner:
 
         tool_sequence = self._tool_sequence(run_id) if run_id else []
         tool_selection_correct = self._judge_tool_selection(case, tool_sequence, status)
-        tool_argument_correct = (
-            self._judge_tool_arguments(case, run_id) if run_id else None
-        )
+        tool_argument_correct = self._judge_tool_arguments(case, run_id) if run_id else None
         if case.expected_arguments and tool_argument_correct is None:
             # 有参数期望但拿不到 run（run 建行就失败）：判不通过。
             # 判 None 会让这个 case 从 M4 分母里消失，掩盖一次没验成的检查。
@@ -638,10 +638,7 @@ class EvaluationRunner:
 
         # 2. 终态与 expect_success 不符
         if case.expect_success and status != "succeeded":
-            return (
-                f"{REASON_RUN_STATUS_MISMATCH}: expect_success=true, "
-                f"actual status={status}"
-            )
+            return f"{REASON_RUN_STATUS_MISMATCH}: expect_success=true, actual status={status}"
         if not case.expect_success and status == "succeeded":
             return (
                 f"{REASON_RUN_STATUS_MISMATCH}: expect_success=false, "
@@ -659,10 +656,7 @@ class EvaluationRunner:
         if tool_argument_correct is False:
             expected_args = case.expected_arguments or {}
             tool_names = ", ".join(sorted(expected_args))
-            return (
-                f"{REASON_TOOL_ARGUMENT_MISMATCH}: tool={tool_names}, "
-                f"expected={expected_args}"
-            )
+            return f"{REASON_TOOL_ARGUMENT_MISMATCH}: tool={tool_names}, expected={expected_args}"
 
         # 5. 引用不足
         if citations < case.required_citations:
@@ -675,9 +669,7 @@ class EvaluationRunner:
         failed = [item for item in assertion_results if not item.passed]
         if failed:
             names = ", ".join(item.assertion for item in failed)
-            detail = "; ".join(
-                f"{item.assertion}: {item.detail}" for item in failed if item.detail
-            )
+            detail = "; ".join(f"{item.assertion}: {item.detail}" for item in failed if item.detail)
             suffix = f"（{detail}）" if detail else ""
             return f"{REASON_ASSERTION_FAILED}: {names}{suffix}"
 
@@ -720,7 +712,9 @@ class EvaluationRunner:
             )
             return []
 
-    def _find_run_for_case(self, evaluation_id: str, case_key: str) -> tuple[str | None, int | None]:
+    def _find_run_for_case(
+        self, evaluation_id: str, case_key: str
+    ) -> tuple[str | None, int | None]:
         """在 run 表里找回某个 case 刚才跑的 run（用于失败路径）。
 
         为什么不用 ``execution.run_id``：异常路径下 ``execute`` 抛出了，
@@ -951,9 +945,8 @@ class EvaluationRunner:
                         total_tokens=result.total_tokens,
                         estimated_cost_usd=Decimal(str(result.estimated_cost_usd or 0)),
                         failure_reason=result.failure_reason,
-                        assertion_results=[
-                            item.to_dict() for item in result.assertion_results
-                        ] or None,
+                        assertion_results=[item.to_dict() for item in result.assertion_results]
+                        or None,
                     )
                 )
                 session.commit()
@@ -1035,8 +1028,7 @@ def _values_match(expected: Any, actual: Any) -> bool:
         if not isinstance(actual, dict):
             return False
         return all(
-            key in actual and _values_match(value, actual[key])
-            for key, value in expected.items()
+            key in actual and _values_match(value, actual[key]) for key, value in expected.items()
         )
 
     return expected == actual

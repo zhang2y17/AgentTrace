@@ -58,9 +58,7 @@ class TestLoadHappyPath:
         path = tmp_path / "ds.jsonl"
         path.write_text(
             "# 这是文件头注释\n"
-            "\n"
-            + json.dumps(_minimal_case(), ensure_ascii=False)
-            + "\n"
+            "\n" + json.dumps(_minimal_case(), ensure_ascii=False) + "\n"
             "   \n"
             "# 中间注释\n",
             encoding="utf-8",
@@ -236,9 +234,7 @@ class TestFieldTypeValidation:
 
     def test_multiple_errors_in_one_case_are_all_reported(self, tmp_path: Path) -> None:
         """一次报全，使用者可以一次改完而不必重跑多轮。"""
-        _write_jsonl(
-            tmp_path, "ds", [_minimal_case(case_key="", expected_tools="not-a-list")]
-        )
+        _write_jsonl(tmp_path, "ds", [_minimal_case(case_key="", expected_tools="not-a-list")])
         with pytest.raises(DatasetValidationError) as exc:
             load_dataset("ds", base_dir=tmp_path)
         fields = {err.get("field") for err in exc.value.details["errors"]}

@@ -63,9 +63,7 @@ def test_full_http_lifecycle(client: TestClient) -> None:
     assert detail_body["run_id"] == run_id
     assert detail_body["counts"] == created["counts"]
     assert detail_body["status"] == created["status"]
-    assert detail_body["result_summary"]["citations"] == (
-        created["result_summary"]["citations"]
-    )
+    assert detail_body["result_summary"]["citations"] == (created["result_summary"]["citations"])
 
     # ---------------------------------------------------------------- 4. 事件
     events_response = client.get(f"/runs/{run_id}/events", params={"limit": 1000})
@@ -91,9 +89,7 @@ def test_full_http_lifecycle(client: TestClient) -> None:
             assert parent["event_type"] == "node", "工具/模型调用必须挂在 node 下"
 
     # 过滤也要能用
-    tool_events = client.get(
-        f"/runs/{run_id}/events", params={"event_type": "tool_call"}
-    ).json()
+    tool_events = client.get(f"/runs/{run_id}/events", params={"event_type": "tool_call"}).json()
     assert tool_events["count"] >= 1
 
     # ---------------------------------------------------------------- 5. 回放
@@ -171,15 +167,11 @@ def test_openapi_document_is_available(client: TestClient) -> None:
     # POST /runs 的请求体必须是 CreateRunRequest，不能夹带内部依赖字段。
     # 这是为了守住一个真实踩过的坑：把 Pydantic 模型（Settings）
     # 或服务类写进路由签名，会让它们凭空变成请求体/查询参数。
-    body_schema = paths["/runs"]["post"]["requestBody"]["content"]["application/json"][
-        "schema"
-    ]
+    body_schema = paths["/runs"]["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert "CreateRunRequest" in body_schema["$ref"]
 
     # /metrics/summary 的查询参数必须正好是契约里的那 6 个
-    param_names = {
-        param["name"] for param in paths["/metrics/summary"]["get"]["parameters"]
-    }
+    param_names = {param["name"] for param in paths["/metrics/summary"]["get"]["parameters"]}
     assert param_names == {
         "started_after",
         "started_before",

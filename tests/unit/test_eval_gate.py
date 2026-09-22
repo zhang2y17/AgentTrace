@@ -106,9 +106,7 @@ class TestGateVerdict:
 
     def test_ratio_below_min_fails(self) -> None:
         metrics = _passing_metrics() | {"run_success_rate": 0.80}
-        result = check_gate(
-            evaluation_id="eval_test", gate_name="g", metrics=metrics
-        )
+        result = check_gate(evaluation_id="eval_test", gate_name="g", metrics=metrics)
         assert result.passed is False
         assert result.blocked is True
         assert len(result.violations) == 1
@@ -429,19 +427,18 @@ class TestMetricInvariants:
 
     def test_m2_exceeding_m1_detected(self) -> None:
         """契约明确写"M2 > M1 说明断言逻辑有 bug"。"""
-        problems = check_metric_invariants(
-            {"run_success_rate": 0.5, "task_completion_rate": 0.9}
-        )
+        problems = check_metric_invariants({"run_success_rate": 0.5, "task_completion_rate": 0.9})
         assert problems
         assert "task_completion_rate" in problems[0]
 
     def test_error_rate_exceeding_complement_detected(self) -> None:
-        problems = check_metric_invariants(
-            {"run_success_rate": 0.9, "error_rate": 0.5}
-        )
+        problems = check_metric_invariants({"run_success_rate": 0.9, "error_rate": 0.5})
         assert problems
 
     def test_none_values_ignored(self) -> None:
-        assert check_metric_invariants(
-            {"run_success_rate": None, "task_completion_rate": None, "error_rate": None}
-        ) == []
+        assert (
+            check_metric_invariants(
+                {"run_success_rate": None, "task_completion_rate": None, "error_rate": None}
+            )
+            == []
+        )

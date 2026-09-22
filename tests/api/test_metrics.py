@@ -228,9 +228,7 @@ class TestMetricsFilters:
 class TestMetricsGroupBy:
     """``group_by`` 分组。"""
 
-    @pytest.mark.parametrize(
-        "dimension", ["agent_version", "prompt_version", "model_name", "day"]
-    )
+    @pytest.mark.parametrize("dimension", ["agent_version", "prompt_version", "model_name", "day"])
     def test_supported_dimensions(self, client: TestClient, dimension: str) -> None:
         _run(client, ANSWERABLE_QUESTION)
 
@@ -283,9 +281,7 @@ class TestMetricsGroupBy:
         assert body["groups"] == []
 
     @pytest.mark.parametrize("bad_value", ["status", "question", "", "AGENT_VERSION"])
-    def test_invalid_group_by_returns_400(
-        self, client: TestClient, bad_value: str
-    ) -> None:
+    def test_invalid_group_by_returns_400(self, client: TestClient, bad_value: str) -> None:
         """非法分组维度必须报错，不能静默当作"不分组"。
 
         静默忽略会让调用方拿到一个"看起来有分组但实际没分组"的响应。

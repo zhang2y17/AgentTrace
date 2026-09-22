@@ -31,14 +31,10 @@ class TestDatabaseProbe:
         assert db["detail"] == "sqlite"
         assert "://" not in (db["detail"] or "")
 
-    def test_database_unreachable_reports_error_not_crash(
-        self, monkeypatch, settings
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_database_unreachable_reports_error_not_crash(self, monkeypatch, settings) -> None:  # type: ignore[no-untyped-def]
         """数据库不可达时 /health 仍返回 200，组件状态为 error。"""
         # 指向一个不可达的 PostgreSQL 地址（端口 1 必然拒绝连接）
-        monkeypatch.setenv(
-            "DATABASE_URL", "postgresql+psycopg://u:p@127.0.0.1:1/nodb"
-        )
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@127.0.0.1:1/nodb")
         from app.core.config import get_settings
         from app.db.session import dispose_engine
 
@@ -125,9 +121,7 @@ class TestOverallStatusAggregation:
 
         with TestClient(create_app()) as client:
             # 用两个假探针模拟"全部正常"
-            register_component_probe(
-                "database", lambda _s: (HealthStatus.OK, "postgresql", None)
-            )
+            register_component_probe("database", lambda _s: (HealthStatus.OK, "postgresql", None))
             register_component_probe("redis", lambda _s: (HealthStatus.OK, None, None))
             try:
                 body = client.get("/health").json()

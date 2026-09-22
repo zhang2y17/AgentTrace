@@ -168,9 +168,7 @@ class TestCreateRunValidation:
 
     @pytest.mark.parametrize("top_k", [0, 11, -1])
     def test_top_k_out_of_range(self, client: TestClient, top_k: int) -> None:
-        response = client.post(
-            "/runs", json={"question": ANSWERABLE_QUESTION, "top_k": top_k}
-        )
+        response = client.post("/runs", json={"question": ANSWERABLE_QUESTION, "top_k": top_k})
 
         assert response.status_code == 400
         _assert_error_shape(response.json())

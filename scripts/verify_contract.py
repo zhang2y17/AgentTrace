@@ -156,9 +156,7 @@ class ContractVerifier:
             actual_paths = set(schema["paths"])
             # 框架内置路由（/docs 等）只存在于 app.routes
             mounted_paths = {
-                route.path
-                for route in app.routes
-                if getattr(route, "path", None) is not None
+                route.path for route in app.routes if getattr(route, "path", None) is not None
             }
         except Exception as exc:  # noqa: BLE001
             self.add("C-06", "10 个 API 端点齐备", False, f"无法生成 OpenAPI: {exc}")

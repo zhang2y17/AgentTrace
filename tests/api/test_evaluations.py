@@ -45,9 +45,7 @@ def evaluation(client: TestClient) -> dict[str, Any]:
     case 多了只会让每个测试从秒级变成十几秒级。
     """
     keys = ["doc-001", "doc-002", "doc-003"]
-    response = client.post(
-        "/evaluations", json={"dataset_version": DATASET, "case_keys": keys}
-    )
+    response = client.post("/evaluations", json={"dataset_version": DATASET, "case_keys": keys})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -89,9 +87,7 @@ class TestCreateEvaluationSuccess:
         ):
             assert field in evaluation, f"缺少字段 {field}"
 
-    def test_timestamps_use_contract_millisecond_format(
-        self, evaluation: dict[str, Any]
-    ) -> None:
+    def test_timestamps_use_contract_millisecond_format(self, evaluation: dict[str, Any]) -> None:
         """契约 §0.2：所有时间为 ISO 8601 UTC、带 ``Z``、**毫秒精度**。
 
         直接声明 ``datetime`` 会在微秒为 0 时省略小数部分
@@ -114,10 +110,7 @@ class TestCreateEvaluationSuccess:
         往往是被静默吞掉的异常。
         """
         assert evaluation["case_count"] == 3
-        assert (
-            evaluation["passed_cases"] + evaluation["failed_cases"]
-            == evaluation["case_count"]
-        )
+        assert evaluation["passed_cases"] + evaluation["failed_cases"] == evaluation["case_count"]
 
     def test_every_case_produced_a_run_id(self, evaluation: dict[str, Any]) -> None:
         assert len(evaluation["run_ids"]) == evaluation["case_count"]
@@ -211,9 +204,7 @@ class TestCreateEvaluationValidation:
         assert response.status_code == 404, response.text
         _assert_error_shape(response.json(), "EVALUATION_NOT_FOUND")
 
-    def test_unknown_case_key_returns_400_with_available_keys(
-        self, client: TestClient
-    ) -> None:
+    def test_unknown_case_key_returns_400_with_available_keys(self, client: TestClient) -> None:
         """未知 ``case_keys`` 必须报错，且回传可用的 key 列表。
 
         静默忽略是最坏的处理：调用方以为跑了指定的 3 个 case，
@@ -241,9 +232,7 @@ class TestCreateEvaluationValidation:
 
     def test_path_traversal_in_dataset_version_is_rejected(self, client: TestClient) -> None:
         """``dataset_version`` 会拼进文件路径，必须挡住 ``../``。"""
-        response = client.post(
-            "/evaluations", json={"dataset_version": "../../etc/passwd"}
-        )
+        response = client.post("/evaluations", json={"dataset_version": "../../etc/passwd"})
 
         assert response.status_code in {400, 404}, response.text
         _assert_error_shape(response.json())
@@ -314,9 +303,9 @@ class TestGetEvaluation:
         )
 
         cases = response.json()["cases"]
-        assert all(
-            case["status"] != "succeeded" or not case["task_completed"] for case in cases
-        ), "only_failures=true 时不应出现判定为通过的 case"
+        assert all(case["status"] != "succeeded" or not case["task_completed"] for case in cases), (
+            "only_failures=true 时不应出现判定为通过的 case"
+        )
         assert len(cases) <= len(everything)
 
     def test_only_failures_without_include_cases_is_harmless_noop(
@@ -340,7 +329,9 @@ class TestGetEvaluation:
         assert response.status_code == 404, response.text
         _assert_error_shape(response.json(), "EVALUATION_NOT_FOUND")
 
-    def test_skipped_metrics_field_present(self, client: TestClient, evaluation: dict[str, Any]) -> None:
+    def test_skipped_metrics_field_present(
+        self, client: TestClient, evaluation: dict[str, Any]
+    ) -> None:
         """``skipped_metrics`` 必须在响应里（哪怕为空数组）。
 
         字段缺失会让调用方无法区分"没有跳过项"与"这个版本还不支持"。

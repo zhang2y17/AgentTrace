@@ -48,7 +48,10 @@ def _build_engine(settings: Settings) -> Engine:
             future=True,
             # SQLite 默认禁止跨线程使用连接；FastAPI 的同步端点跑在线程池里，
             # 因此必须关闭该检查。测试场景下这是安全的。
-            connect_args={"check_same_thread": False, "timeout": settings.db_connect_timeout_seconds},
+            connect_args={
+                "check_same_thread": False,
+                "timeout": settings.db_connect_timeout_seconds,
+            },
         )
 
         @event.listens_for(engine, "connect")

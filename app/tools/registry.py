@@ -370,7 +370,9 @@ def _safe_arguments(raw: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, str | int | float | bool) or value is None:
             serializable[str(key)] = value
         elif isinstance(value, list | tuple):
-            serializable[str(key)] = [item for item in value if isinstance(item, str | int | float | bool)]
+            serializable[str(key)] = [
+                item for item in value if isinstance(item, str | int | float | bool)
+            ]
         else:
             serializable[str(key)] = f"<{type(value).__name__}>"
     return redact_mapping(serializable)

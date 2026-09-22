@@ -407,15 +407,11 @@ def _to_case_result(eval_run: Any, case_key: str) -> CaseResult:
         tool_selection_correct=eval_run.tool_selection_correct,
         tool_argument_correct=eval_run.tool_argument_correct,
         evidence_coverage=(
-            float(eval_run.evidence_coverage)
-            if eval_run.evidence_coverage is not None
-            else None
+            float(eval_run.evidence_coverage) if eval_run.evidence_coverage is not None else None
         ),
         latency_ms=eval_run.latency_ms,
         total_tokens=int(eval_run.total_tokens or 0),
-        estimated_cost_usd=(
-            cost if isinstance(cost, Decimal) else Decimal(str(cost or 0))
-        ),
+        estimated_cost_usd=(cost if isinstance(cost, Decimal) else Decimal(str(cost or 0))),
         failure_reason=eval_run.failure_reason,
         assertion_results=assertions,
         needs_human_review=str(eval_run.status) == "timeout",

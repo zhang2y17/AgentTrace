@@ -115,9 +115,7 @@ class TestNoHallucinatedDoc:
         assert evaluate_assertion("no_hallucinated_doc", _facts(citations=[])).passed is True
 
     def test_fails_on_unknown_doc_id(self) -> None:
-        result = evaluate_assertion(
-            "no_hallucinated_doc", _facts(citations=["doc-001", "doc-999"])
-        )
+        result = evaluate_assertion("no_hallucinated_doc", _facts(citations=["doc-001", "doc-999"]))
         assert result.passed is False
         assert "doc-999" in (result.detail or "")
 
@@ -128,9 +126,7 @@ class TestNoHallucinatedDoc:
         应该放行。但此时无法区分"没编造"与"没检查" ——
         后者会把一次根本没验的评测报成通过，比误报失败危险得多。
         """
-        result = evaluate_assertion(
-            "no_hallucinated_doc", _facts(known_document_ids=frozenset())
-        )
+        result = evaluate_assertion("no_hallucinated_doc", _facts(known_document_ids=frozenset()))
         assert result.passed is False
         assert "无法校验" in (result.detail or "")
 
@@ -143,9 +139,7 @@ class TestStatusAssertions:
         assert "failed" in (failed.detail or "")
 
     def test_status_is_failed(self) -> None:
-        assert (
-            evaluate_assertion("status_is_failed", _facts(run_status="failed")).passed is True
-        )
+        assert evaluate_assertion("status_is_failed", _facts(run_status="failed")).passed is True
         assert evaluate_assertion("status_is_failed", _facts()).passed is False
 
 
@@ -208,9 +202,7 @@ class TestEvaluateAssertions:
         assert evaluate_assertions([], _facts()) == []
 
     def test_mixed_pass_and_fail_are_both_reported(self) -> None:
-        results = evaluate_assertions(
-            ["contains_citation", "mentions_不存在"], _facts()
-        )
+        results = evaluate_assertions(["contains_citation", "mentions_不存在"], _facts())
         assert [item.passed for item in results] == [True, False]
 
 

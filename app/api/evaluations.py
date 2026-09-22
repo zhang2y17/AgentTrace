@@ -117,6 +117,7 @@ def get_evaluation(
 
     return EvaluationResponse(**_normalize_payload(payload))
 
+
 def _thresholds_to_mapping(thresholds: object) -> dict[str, dict[str, float]] | None:
     """把 Pydantic 阈值模型转成服务层用的普通字典。
 

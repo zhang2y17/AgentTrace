@@ -279,9 +279,7 @@ class MetricsService:
         degraded_count = sum(1 for run in runs if run.status == "degraded")
 
         durations = sorted(
-            float(run.total_duration_ms)
-            for run in runs
-            if run.total_duration_ms is not None
+            float(run.total_duration_ms) for run in runs if run.total_duration_ms is not None
         )
         total_tokens = sum(int(run.total_tokens or 0) for run in runs)
         total_cost = sum(float(run.estimated_cost_usd or 0) for run in runs)
@@ -290,9 +288,7 @@ class MetricsService:
         # 但**仍计入分母** —— 否则"没有摘要的 run"会被悄悄排除，
         # 让指标看起来更好。
         sufficient_count = sum(
-            1
-            for run in runs
-            if bool((run.result_summary or {}).get("evidence_sufficient", False))
+            1 for run in runs if bool((run.result_summary or {}).get("evidence_sufficient", False))
         )
 
         # 成本完整性：只要有任何一次模型调用的成本无法估算，整批的成本
@@ -413,11 +409,7 @@ class MetricsService:
         try:
             from app.db.models import EvalRun
 
-            stmt = (
-                select(func.count())
-                .select_from(EvalRun)
-                .where(EvalRun.run_id.in_(run_ids))
-            )
+            stmt = select(func.count()).select_from(EvalRun).where(EvalRun.run_id.in_(run_ids))
             factory = self._resolve_session_factory()
             with factory() as session:
                 linked = int(session.execute(stmt).scalar_one())

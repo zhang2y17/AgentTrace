@@ -184,3 +184,52 @@ class TestLoopbackDetection:
     )
     def test_loopback(self, url: str, expected: bool) -> None:
         assert is_loopback_host(url) is expected
+
+
+class TestEnvExampleCoverage:
+    """``.env.example`` 必须与 ``Settings`` 的字段集完全一致。
+
+    这条约束的价值在"新加配置项时"体现：漏写文档不会让任何测试失败，
+    只会让下一个使用者不知道有这个开关存在 —— 于是它形同虚设，
+    而作者以为它可配置。反向的漂移更糟：``.env.example`` 里留着一个
+    已被重命名的旧键，抄过去之后**不报错也不生效**。
+    """
+
+    def _documented_keys(self) -> set[str]:
+        import re
+        from pathlib import Path
+
+        # 从测试文件位置向上找到项目根，避免依赖当前工作目录
+        # （``isolated_env`` 夹具会把 cwd 切到 tmp_path）。
+        root = Path(__file__).resolve().parents[2]
+        text = (root / ".env.example").read_text(encoding="utf-8")
+        return {match.group(1) for match in re.finditer(r"^([A-Z][A-Z0-9_]*)=.*$", text, re.M)}
+
+    def test_no_undocumented_setting(self) -> None:
+        """每个 ``Settings`` 字段都要在样例里出现。"""
+        from app.core.config import Settings
+
+        undocumented = sorted(
+            {name.upper() for name in Settings.model_fields} - self._documented_keys()
+        )
+        assert undocumented == [], f"以下配置项未写入 .env.example：{undocumented}"
+
+    def test_no_stale_entry_in_env_example(self) -> None:
+        """样例里不能有代码不认的键。"""
+        from app.core.config import Settings
+
+        stale = sorted(self._documented_keys() - {name.upper() for name in Settings.model_fields})
+        assert stale == [], f".env.example 含已失效的配置项：{stale}"
+
+    def test_compose_services_match_expectation(self) -> None:
+        """CI 会校验 compose 含 api/postgres/redis 三个服务。
+
+        这里把同样的期望放在单测里，让本地改坏编排时能立刻发现，
+        而不必等 CI 跑完。
+        """
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        text = (root / "docker-compose.yml").read_text(encoding="utf-8")
+        for service in ("api:", "postgres:", "redis:"):
+            assert f"  {service}" in text, f"docker-compose.yml 缺少服务 {service}"

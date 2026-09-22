@@ -213,9 +213,7 @@ def load_dataset(
     seen_keys: dict[str, int] = {}
     errors: list[dict[str, Any]] = []
 
-    for line_number, raw_line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
-    ):
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         stripped = raw_line.strip()
         # 空行与 # 注释是 JSONL 的常见便利写法，容忍它们不会掩盖错误。
         if not stripped or stripped.startswith("#"):
@@ -378,9 +376,7 @@ def _parse_case(  # noqa: C901 —— 逐字段校验天然是长函数，拆开
             question=question,
             expected_tools=list(expected_tools),
             expected_arguments=(
-                {k: dict(v) for k, v in expected_arguments.items()}
-                if expected_arguments
-                else None
+                {k: dict(v) for k, v in expected_arguments.items()} if expected_arguments else None
             ),
             required_assertions=list(required_assertions),
             required_citations=int(required_citations),

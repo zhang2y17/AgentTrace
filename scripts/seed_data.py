@@ -319,7 +319,9 @@ def _write_demo_trace(run_id: str, started_at: datetime) -> None:
             attributes={"agent_version": get_settings().agent_version},
             started_at=started_at,
         )
-        repo.close_event(run_event.event_id, status="ok", ended_at=started_at + timedelta(milliseconds=2))
+        repo.close_event(
+            run_event.event_id, status="ok", ended_at=started_at + timedelta(milliseconds=2)
+        )
 
         # 节点一律挂在 run 事件下（扁平一层），工具/模型调用挂在所属节点下。
         # 这比"节点链式父子"更贴近真实拓扑：节点是并列的步骤，不是嵌套的。
@@ -557,7 +559,9 @@ def main() -> int:
     print("=" * 74)
     print(f"方言     : {settings.database_dialect}")
     print(f"连接串   : {settings.safe_database_url()}")
-    print(f"替换模式 : {'是（fake provider，不调用真实模型）' if settings.is_test_double_mode else '否'}")
+    print(
+        f"替换模式 : {'是（fake provider，不调用真实模型）' if settings.is_test_double_mode else '否'}"
+    )
     print()
 
     healthy, error = check_database_health(settings)

@@ -673,9 +673,7 @@ class RunService:
                 )
                 tool_calls = int(
                     session.execute(
-                        select(func.count())
-                        .select_from(ToolCall)
-                        .where(ToolCall.run_id == run_id)
+                        select(func.count()).select_from(ToolCall).where(ToolCall.run_id == run_id)
                     ).scalar_one()
                 )
                 model_calls = int(
