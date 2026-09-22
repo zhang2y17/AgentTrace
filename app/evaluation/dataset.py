@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +37,11 @@ logger = get_logger(__name__)
 # case_key 的格式约束：小写字母/数字/连字符，便于用作稳定 ID。
 # 不强制这个格式也不会出错，但稳定的命名让"跨版本对齐 case"可靠得多。
 _CASE_KEY_PATTERN_MAX = 80
+
+# dataset_version 会进入文件路径。只允许可移植的版本名字符，避免 Windows
+# 与 POSIX 对 ``/``、``\``、盘符等路径语法的解释不同，导致同一输入在
+# 本地被拒绝、到了 Linux CI 却被当成普通文件名。
+_DATASET_VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,59}\Z")
 
 # 单个 case 的必备字段。缺任何一个都无法执行该 case。
 _REQUIRED_FIELDS = ("case_key", "question", "expected_tools", "required_assertions")
@@ -160,6 +166,12 @@ class EvalDataset:
 
 def dataset_path(dataset_version: str, *, base_dir: str | Path | None = None) -> Path:
     """解析评测集文件路径，并挡住路径穿越。"""
+    if not _DATASET_VERSION_PATTERN.fullmatch(dataset_version):
+        raise DatasetValidationError(
+            f"dataset_version 不合法：{dataset_version!r}；仅允许字母、数字、点、下划线和连字符。",
+            details={"dataset_version": dataset_version},
+        )
+
     if base_dir is None:
         from app.core.config import get_settings
 
