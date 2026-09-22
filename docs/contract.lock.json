@@ -1,0 +1,163 @@
+{
+  "$comment": "AgentTrace 契约锁定文件。S8 验收阶段用 scripts/verify_contract.py 读取本文件，程序化校验代码是否与设计文档一致。任何契约变更必须先改 docs/ 下的设计文档，再改本文件，最后改代码。",
+  "version": "0.1.0",
+  "agent_definition": {
+    "name": "doc-research",
+    "nodes": [
+      "question_parser",
+      "document_search",
+      "evidence_checker",
+      "answer_writer",
+      "final_validator"
+    ],
+    "node_order_fixed": true,
+    "conditional_edge": {
+      "from": "evidence_checker",
+      "to": "document_search",
+      "condition": "evidence_insufficient_and_retry_available"
+    },
+    "max_evidence_retries": 1
+  },
+  "tools": [
+    {
+      "name": "search_documents",
+      "version": "1.0.0",
+      "parameters": {
+        "query": {"type": "str", "required": true},
+        "top_k": {"type": "int", "required": true, "min": 1, "max": 10}
+      },
+      "returns": "list[DocumentHit]",
+      "deterministic": true,
+      "uses_llm": false
+    },
+    {
+      "name": "get_document",
+      "version": "1.0.0",
+      "parameters": {
+        "document_id": {"type": "str", "required": true}
+      },
+      "returns": "Document",
+      "deterministic": true,
+      "uses_llm": false
+    },
+    {
+      "name": "calculate_latency_summary",
+      "version": "1.0.0",
+      "parameters": {
+        "run_id": {"type": "str", "required": true}
+      },
+      "returns": "LatencySummary",
+      "deterministic": true,
+      "uses_llm": false
+    },
+    {
+      "name": "calculate_cost_summary",
+      "version": "1.0.0",
+      "parameters": {
+        "run_id": {"type": "str", "required": true}
+      },
+      "returns": "CostSummary",
+      "deterministic": true,
+      "uses_llm": false
+    }
+  ],
+  "event_types": ["run", "node", "tool_call", "model_call", "error", "final_result"],
+  "event_statuses": [
+    "pending",
+    "running",
+    "ok",
+    "failed",
+    "skipped",
+    "retried",
+    "invalid_arguments",
+    "handoff"
+  ],
+  "run_statuses": ["pending", "running", "succeeded", "failed", "degraded", "timeout"],
+  "trace_event_required_fields": [
+    "event_id",
+    "run_id",
+    "parent_event_id",
+    "event_type",
+    "name",
+    "status",
+    "started_at",
+    "ended_at",
+    "duration_ms",
+    "input_summary",
+    "output_summary",
+    "error_code"
+  ],
+  "tables": [
+    "agent_definition",
+    "run",
+    "trace_event",
+    "tool_call",
+    "model_call",
+    "eval_case",
+    "eval_run",
+    "quality_gate"
+  ],
+  "api_endpoints": [
+    {"method": "GET", "path": "/health"},
+    {"method": "POST", "path": "/runs"},
+    {"method": "GET", "path": "/runs/{run_id}"},
+    {"method": "GET", "path": "/runs/{run_id}/events"},
+    {"method": "POST", "path": "/runs/{run_id}/replay"},
+    {"method": "POST", "path": "/evaluations"},
+    {"method": "GET", "path": "/evaluations/{evaluation_id}"},
+    {"method": "GET", "path": "/metrics/summary"},
+    {"method": "POST", "path": "/quality-gates/check"},
+    {"method": "GET", "path": "/docs"}
+  ],
+  "metrics": [
+    "run_success_rate",
+    "task_completion_rate",
+    "tool_selection_accuracy",
+    "tool_argument_accuracy",
+    "evidence_coverage",
+    "latency_ms_p50",
+    "latency_ms_p95",
+    "latency_ms_mean",
+    "total_tokens",
+    "estimated_cost_usd",
+    "error_rate",
+    "human_review_rate"
+  ],
+  "id_prefixes": {
+    "run": "run_",
+    "trace_event": "evt_",
+    "tool_call": "tc_",
+    "model_call": "mc_",
+    "agent_definition": "agentdef_",
+    "eval_case": "case_",
+    "eval_run": "evalrun_",
+    "quality_gate": "gate_",
+    "evaluation": "eval_"
+  },
+  "error_codes": [
+    "INVALID_ARGUMENT",
+    "RUN_NOT_FOUND",
+    "EVALUATION_NOT_FOUND",
+    "RUN_NOT_REPLAYABLE",
+    "AGENT_VALIDATION_ERROR",
+    "TRACE_WRITE_FAILED",
+    "INTERNAL_ERROR",
+    "LLM_PROVIDER_ERROR",
+    "AGENT_TIMEOUT"
+  ],
+  "forbidden_claims": [
+    "生产可用",
+    "企业级",
+    "线上用户",
+    "商业客户",
+    "商业收益"
+  ],
+  "org_denylist": [
+    "tencent",
+    "bytedance",
+    "alibaba",
+    "baidu",
+    "internal.",
+    "corp."
+  ]
+}

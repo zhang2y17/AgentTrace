@@ -1,0 +1,57 @@
+%% AgentTrace 示例 Agent 工作流（技术文档研究 Agent）
+%% 固定 5 节点，evidence_checker -> document_search 存在一次放宽检索的条件边
+flowchart TD
+    START([START]) --> QP
+
+    QP["1. question_parser<br/>解析问题 → parsed_task<br/>intent / keywords / needs_search"]
+    QP -.-> MQ["model_call<br/>provider=fake|openai|ollama"]
+    QP --> DS
+
+    DS["2. document_search<br/>调用检索工具<br/>search_documents(query, top_k)"]
+    DS -.-> T1["tool_call<br/>search_documents"]
+    DS -.-> T2["tool_call<br/>get_document<br/>(命中高分文档时)"]
+    DS --> EC
+
+    EC{"3. evidence_checker<br/>证据是否充分?<br/>coverage >= threshold"}
+
+    EC -- "不足 且 retry < MAX_EVIDENCE_RETRIES" --> DS
+    EC -- "不足 且 retry 耗尽" --> HO
+    EC -- "充分" --> AW
+
+    HO["handoff<br/>标记需人工接管<br/>run.status = failed"]
+    HO --> FR
+
+    AW["4. answer_writer<br/>基于证据生成结构化答案<br/>含 [doc-xxx] 引用"]
+    AW -.-> MA["model_call"]
+    AW --> FV
+
+    FV{"5. final_validator<br/>含引用? 必要字段齐全?"}
+    FV -- "通过" --> OK["run.status = succeeded"]
+    FV -- "缺引用/字段" --> DEG["run.status = degraded<br/>validation_errors 记录原因"]
+    FV -- "致命错误" --> FAIL["run.status = failed"]
+
+    OK --> FR
+    DEG --> FR
+    FAIL --> FR
+
+    FR["final_result 事件<br/>写 total_tokens / estimated_cost_usd"] --> END([END])
+
+    %% Trace 写入点（每个节点与工具调用都产生 trace_event）
+    TR["TraceRecorder 中间件<br/>node_enter → INSERT trace_event(status=running)<br/>node_exit  → UPDATE ended_at, duration_ms, status"]
+    QP -.-> TR
+    DS -.-> TR
+    EC -.-> TR
+    AW -.-> TR
+    FV -.-> TR
+
+    subgraph TOOLS["工具注册表 app/tools/registry.py"]
+        direction LR
+        REG["ToolRegistry.invoke(name, raw_args)"]
+        REG --> V{"Pydantic 校验参数"}
+        V -- "失败" --> IV["tool_call.status = invalid_arguments<br/>不调用实现体"]
+        V -- "通过" --> EX["执行实现体 + 计时"]
+        EX --> REC["写 tool_call(validated=true)"]
+    end
+
+    T1 -.-> REG
+    T2 -.-> REG

@@ -1,0 +1,74 @@
+%% AgentTrace 评测与质量门禁流程
+flowchart TD
+    A["POST /evaluations<br/>{dataset_version, agent_version, prompt_version, thresholds?}"]
+    A --> B["dataset.py<br/>加载 data/eval/{dataset_version}.jsonl"]
+    B --> C{"schema 校验"}
+    C -- "失败" --> C1["400 INVALID_ARGUMENT<br/>回报行号 + 字段 + 原因"]
+    C -- "通过" --> D["建立 evaluation_id 批次"]
+
+    D --> E{"还有 case?"}
+    E -- "无" --> M
+
+    E -- "有" --> F["取出 case<br/>question / expected_tools / expected_arguments / required_assertions"]
+    F --> G["RunService.execute(question)<br/>产生 run + trace_event + tool_call + model_call"]
+    G --> H["case 级判定"]
+
+    subgraph JUDGE["case 级判定（app/evaluation/runner.py）"]
+        direction TB
+        H1["task_completed?<br/>status==succeeded && answer 非空 && 全部断言通过"]
+        H2["tool_selection_correct?<br/>ordered_match(actual_success_tools, expected_tools)"]
+        H3["tool_argument_correct?<br/>_compare_arg 逐参数比较（标量/列表/字典/None）"]
+        H4["evidence_coverage =<br/>min(1, citations / max(1, required_citations))"]
+        H5["assertions 逐条执行<br/>含 no_hallucinated_doc 反幻觉断言"]
+        H1 --> H2 --> H3 --> H4 --> H5
+    end
+
+    H --> JUDGE
+    JUDGE --> I["写入 eval_run 行<br/>含 failure_reason + assertion_results + run_id"]
+    I --> E
+
+    M["metrics.py 计算 10 个指标"]
+    M --> M1["run_success_rate<br/>task_completion_rate<br/>tool_selection_accuracy<br/>tool_argument_accuracy<br/>evidence_coverage"]
+    M --> M2["latency_ms_p50 / p95 / mean<br/>（nearest-rank，无插值）"]
+    M --> M3["total_tokens<br/>estimated_cost_usd（价目表）"]
+    M --> M4["error_rate<br/>human_review_rate"]
+    M1 --> N["批次指标汇总"]
+    M2 --> N
+    M3 --> N
+    M4 --> N
+
+    N --> O{"调用方要求门禁?"}
+    O -- "否" --> P["返回 201 + evaluation_id + metrics<br/>标注 scope=offline_evaluation"]
+    O -- "是" --> Q["gate.py<br/>POST /quality-gates/check"]
+
+    Q --> R["逐阈值判定"]
+    R --> R1["比率型指标: observed < min  → 违规"]
+    R --> R2["代价型指标: observed > max  → 违规"]
+    R --> R3["observed 为 null → 列入 skipped_metrics<br/>不参与判定（但不得声称为通过）"]
+    R1 --> S["汇总 violations"]
+    R2 --> S
+    R3 --> S
+
+    S --> T{"violations 为空?"}
+    T -- "是" --> U["passed=true, blocked=false<br/>status=passed"]
+    T -- "否" --> V["passed=false, blocked=true<br/>status=failed<br/>逐条给出 reason"]
+    U --> W["写入 quality_gate 行<br/>含 thresholds 快照 + observed_metrics"]
+    V --> W
+    W --> X["返回 200 + gate 结果"]
+
+    subgraph CLI["scripts/run_eval.py --gate"]
+        direction TB
+        Y1["退出码 0：评测完成 + 门禁通过"]
+        Y2["退出码 1：门禁未通过（阻断，CI 应失败）"]
+        Y3["退出码 2：评测自身出错（数据集/Trace 写入失败）"]
+    end
+    X -.-> CLI
+
+    P --> Z["对比模式<br/>GET /metrics/summary?group_by=agent_version|prompt_version|model_name"]
+
+    subgraph DOUBLE["测试替身 vs 真实集成（强制区分）"]
+        direction TB
+        D1["LLM_PROVIDER=fake<br/>is_test_double=true<br/>不访问网络，不需要 Key<br/>只验证流程与逻辑正确性"]
+        D2["LLM_PROVIDER=openai|ollama<br/>is_test_double=false<br/>需要 Key（仅从 env 读取）<br/>ENABLE_REAL_LLM_TESTS=true 才跑集成测试"]
+    end
+    G -.-> DOUBLE
