@@ -20,7 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import health
+from app.api import health, metrics, runs
 from app.core.config import get_settings
 from app.core.errors import (
     AgentTraceError,
@@ -270,7 +270,12 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content=body.model_dump(mode="json"))
 
     # ------------------------------------------------------------ 路由
+    #
+    # 挂载顺序不影响路由匹配（路径互不重叠），但按契约文档的章节顺序
+    # 排列，便于在 /openapi.json 里逐条对照 API_CONTRACT.md。
     app.include_router(health.router)
+    app.include_router(runs.router)
+    app.include_router(metrics.router)
 
     return app
 

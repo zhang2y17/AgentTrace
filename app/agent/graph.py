@@ -121,40 +121,73 @@ def build_graph(deps: AgentDeps, *, checkpointer: Any | None = None) -> Any:
     graph = StateGraph(AgentState)
 
     # ---------------------------------------------------------- 注册节点
+    #
+    # 每个节点都被 ``_trace_node`` 包一层，由它负责写 ``node`` 事件的
+    # 开始与结束。**为什么在这里包而不是让每个节点自己调用 recorder.node()**：
+    #
+    # 1. 节点函数因此只需报告"我在内部调用了哪些工具/模型"，
+    #    不必关心"我这一次执行的起止与终态"—— 后者的职责边界属于图；
+    # 2. "有开始必有结束"只在一个地方保证。若分散到 5 个节点里，
+    #    任何一个节点忘记收尾都会留下永久 ``running`` 的事件；
+    # 3. 节点函数可以完全脱离数据库单测（传 recorder=None 即可）。
+    #
+    # 早期版本没有这层包装，节点内部只调 record_tool_call /
+    # record_model_call，结果 **一条 node 事件都不会写入** ——
+    # 而 node 事件是回放与延迟统计的主干，等于 Trace 的主体缺失。
     graph.add_node(
         NODE_QUESTION_PARSER,
-        partial(
-            node_functions.parse_question,
-            provider=deps.provider,
+        _trace_node(
+            NODE_QUESTION_PARSER,
+            partial(
+                node_functions.parse_question,
+                provider=deps.provider,
+                recorder=deps.recorder,
+            ),
             recorder=deps.recorder,
         ),
     )
     graph.add_node(
         NODE_DOCUMENT_SEARCH,
-        partial(
-            node_functions.document_search,
-            registry=deps.registry,
+        _trace_node(
+            NODE_DOCUMENT_SEARCH,
+            partial(
+                node_functions.document_search,
+                registry=deps.registry,
+                recorder=deps.recorder,
+                max_top_k=deps.max_top_k,
+            ),
             recorder=deps.recorder,
-            max_top_k=deps.max_top_k,
         ),
     )
     graph.add_node(
         NODE_EVIDENCE_CHECKER,
-        partial(node_functions.check_evidence, recorder=deps.recorder),
+        _trace_node(
+            NODE_EVIDENCE_CHECKER,
+            partial(node_functions.check_evidence, recorder=deps.recorder),
+            recorder=deps.recorder,
+        ),
     )
     graph.add_node(
         NODE_ANSWER_WRITER,
-        partial(
-            node_functions.write_answer,
-            provider=deps.provider,
+        _trace_node(
+            NODE_ANSWER_WRITER,
+            partial(
+                node_functions.write_answer,
+                provider=deps.provider,
+                recorder=deps.recorder,
+            ),
             recorder=deps.recorder,
         ),
     )
     graph.add_node(
         NODE_FINAL_VALIDATOR,
-        partial(
-            node_functions.validate_final_answer,
-            known_document_ids=deps.resolved_known_document_ids(),
+        _trace_node(
+            NODE_FINAL_VALIDATOR,
+            partial(
+                node_functions.validate_final_answer,
+                known_document_ids=deps.resolved_known_document_ids(),
+                recorder=deps.recorder,
+            ),
             recorder=deps.recorder,
         ),
     )
@@ -185,6 +218,124 @@ def build_graph(deps: AgentDeps, *, checkpointer: Any | None = None) -> Any:
         extra={"nodes": list(NODE_ORDER), "max_evidence_retries": deps.resolved_max_evidence_retries()},
     )
     return compiled
+
+
+def _trace_node(
+    name: str,
+    node_fn: Any,
+    *,
+    recorder: Any | None,
+) -> Any:
+    """把节点函数包成"自带 node 事件生命周期"的可调用对象。
+
+    Args:
+        name: 节点名，写入 ``trace_event.name``。
+        node_fn: 原始节点函数，签名 ``(state) -> dict``。
+        recorder: ``TraceRecorder``；``None`` 时退化为直接调用
+            （纯逻辑单测不需要数据库）。
+
+    Returns:
+        包装后的函数，签名与 ``node_fn`` 一致。
+
+    包装后每次执行会写入**一条** ``node`` 事件：
+    开始写 ``status=running``，正常返回补 ``ok``，抛异常补 ``failed``。
+    节点的输入/输出摘要取自状态里的关键字段，而不是整个状态 ——
+    状态里有文档正文，整份写进 Trace 会让事件体积失控。
+    """
+    if recorder is None:
+        return node_fn
+
+    def _wrapper(state: Any) -> Any:
+        run_id = str((state or {}).get("run_id") or "")
+        if not run_id:
+            # 没有 run_id 就无法归属事件。这种情况下直接执行：
+            # 记录一条无处归属的事件比不记录更糟（会破坏外键语义）。
+            return node_fn(state)
+
+        with recorder.node(
+            run_id=run_id,
+            name=name,
+            input_summary=_node_input_summary(name, state),
+        ) as span:
+            # 把本节点的 event_id 塞进 state，供节点内的工具/模型调用
+            # 作为 parent_event_id。契约 TRACE_SCHEMA §5 规则 3 要求
+            # tool_call / model_call 必须挂在发起它们的 node 之下。
+            #
+            # 注入发生在**进入节点之前**，且节点内部读取的是自己那份
+            # 局部 state —— LangGraph 的 state 是不可变增量更新，
+            # 这里改的是传入的 dict，因此必须确保节点读到的是同一个对象。
+            if isinstance(state, dict):
+                state["current_node_event_id"] = span.event_id
+
+            result = node_fn(state)
+            span.succeed(output_summary=_node_output_summary(name, result))
+            return result
+
+    # 保留原名，便于日志与调试时辨识
+    _wrapper.__name__ = f"traced_{name}"
+    return _wrapper
+
+
+def _node_input_summary(name: str, state: Any) -> dict[str, Any]:
+    """按节点抽取输入摘要。
+
+    刻意逐个节点挑选字段：把整个 state 序列化会把检索到的文档正文
+    一并写进 Trace，既膨胀存储又违背"只存摘要"的契约。
+    """
+    state = state or {}
+    if name == NODE_QUESTION_PARSER:
+        return {"question_chars": len(str(state.get("question") or ""))}
+    if name == NODE_DOCUMENT_SEARCH:
+        return {
+            "top_k": state.get("top_k"),
+            "search_attempt": state.get("search_attempt", 0),
+            "keyword_count": len((state.get("parsed_task") or {}).get("keywords") or []),
+        }
+    if name == NODE_EVIDENCE_CHECKER:
+        return {"hit_count": len(state.get("search_results") or [])}
+    if name == NODE_ANSWER_WRITER:
+        return {
+            "document_count": len(state.get("fetched_documents") or []),
+            "evidence_sufficient": bool(state.get("evidence_sufficient", False)),
+        }
+    if name == NODE_FINAL_VALIDATOR:
+        return {"answer_chars": state.get("answer_chars", 0)}
+    return {}
+
+
+def _node_output_summary(name: str, result: Any) -> dict[str, Any]:
+    """按节点抽取输出摘要。"""
+    if not isinstance(result, dict):
+        return {}
+    if name == NODE_QUESTION_PARSER:
+        parsed = result.get("parsed_task") or {}
+        return {
+            "intent": parsed.get("intent"),
+            "keyword_count": len(parsed.get("keywords") or []),
+        }
+    if name == NODE_DOCUMENT_SEARCH:
+        return {
+            "hit_count": len(result.get("search_results") or []),
+            "fetched_count": len(result.get("fetched_documents") or []),
+        }
+    if name == NODE_EVIDENCE_CHECKER:
+        return {
+            "evidence_sufficient": result.get("evidence_sufficient"),
+            "evidence_coverage": result.get("evidence_coverage"),
+        }
+    if name == NODE_ANSWER_WRITER:
+        return {
+            "answer_chars": result.get("answer_chars", 0),
+            "citation_count": len(result.get("citations") or []),
+            "degraded": result.get("degraded"),
+        }
+    if name == NODE_FINAL_VALIDATOR:
+        final = result.get("final_result") or {}
+        return {
+            "status": final.get("status"),
+            "validation_error_count": len(result.get("validation_errors") or []),
+        }
+    return {}
 
 
 def _route_after_evidence(state: AgentState, *, max_retries: int) -> str:

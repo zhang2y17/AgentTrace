@@ -108,10 +108,17 @@ class TraceRepository:
         total_tokens: int = 0,
         estimated_cost_usd: Decimal | float = Decimal("0"),
         ended_at: datetime | None = None,
+        duration_ms: int | None = None,
     ) -> None:
         """写入 run 的终态与汇总数值。
 
         ``ended_at`` 与 ``total_duration_ms`` 同时写入，保证二者自洽。
+
+        ``duration_ms`` 显式传入时会覆盖按时间戳计算的耗时。用途：
+        ``RunService`` 用 ``time.perf_counter`` 测的耗时比
+        ``ended_at - started_at`` 更接近真实执行时长（后者包含
+        建行与落库的开销），且 run 行与 ``run`` 根事件必须报同一个数，
+        否则读数的人会以为是两次不同的运行。
         """
         from app.db.base import elapsed_ms, utcnow
 
@@ -124,7 +131,9 @@ class TraceRepository:
         finished = ended_at or utcnow()
         run.status = status
         run.ended_at = finished
-        if run.started_at is not None:
+        if duration_ms is not None:
+            run.total_duration_ms = max(0, int(duration_ms))
+        elif run.started_at is not None:
             # 同 close_event：SQLite 读回的时间戳是 naive，
             # 直接相减会在 SQLite 上抛 TypeError。
             run.total_duration_ms = elapsed_ms(run.started_at, finished)
@@ -311,6 +320,68 @@ class TraceRepository:
             event.attributes = merged
 
         self._flush(entity="trace_event")
+
+    def set_event_duration(self, event_id: str, duration_ms: int) -> None:
+        """用显式值覆盖事件的 ``duration_ms``。
+
+        存在的理由：``close_event`` 按 ``ended_at - started_at`` 计算耗时，
+        而那个差值包含"写入 ended_at 之前的所有代码"（包括落库开销）。
+        对于 ``run`` 根事件，整次运行的耗时应当与 run 行报同一个数 ——
+        两个地方报不同的数会让读数的人以为是两次不同的运行。
+
+        本方法只改 ``duration_ms``，不动 ``ended_at`` 与状态。
+        """
+        event = self.session.get(TraceEvent, event_id)
+        if event is None:
+            raise TracePersistenceError(
+                "无法设置不存在事件的耗时。", details={"event_id": event_id}
+            )
+        event.duration_ms = max(0, int(duration_ms))
+        self._flush(entity="trace_event")
+
+    def record_final_result_event(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        parent_event_id: str | None = None,
+        output_summary: Any = None,
+        error_code: str | None = None,
+        attributes: dict[str, Any] | None = None,
+        summary_max_chars: int = 500,
+    ) -> str:
+        """写 ``event_type=final_result`` 的终结事件。
+
+        契约 TRACE_SCHEMA §5：``final_result`` 与 5 个 ``node`` 同级，
+        直接挂在 ``run`` 根事件下。它是"这次运行得出什么结论"的
+        唯一权威记录 —— 没有它，Trace 只能说明"跑过哪些节点"，
+        无法回答"最终判定是什么"。
+
+        **``status`` 是事件级状态（EventStatus），不是 run 级状态。**
+        两个枚举取值不同（事件层没有 ``succeeded`` / ``degraded`` /
+        ``timeout``），调用方必须先映射。这里把 run 级的原始结论
+        记在 ``attributes.run_status`` 里 —— 映射会丢掉信息，
+        而"这次到底是 degraded 还是 succeeded"是有诊断价值的，
+        不能因为枚举对不上就丢掉。
+
+        ``final_result`` 是点事件：写入即终态。
+        """
+        attributes = dict(attributes or {})
+        attributes.setdefault("run_status", status)
+
+        event = self.append_event(
+            run_id=run_id,
+            event_type="final_result",
+            name="final_result",
+            status=status,
+            parent_event_id=parent_event_id,
+            output_summary=output_summary,
+            error_code=error_code,
+            attributes=attributes,
+            summary_max_chars=summary_max_chars,
+        )
+        self.close_event(event.event_id, status=status, error_code=error_code)
+        return event.event_id
 
     def list_events(
         self,

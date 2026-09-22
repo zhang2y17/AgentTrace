@@ -71,6 +71,7 @@ def document_search(
         run_id=run_id,
         node_name="document_search",
         recorder=recorder,
+        parent_event_id=state.get("current_node_event_id"),
     )
 
     # 把命中的前若干篇正文取回来，供 evidence_checker 判断覆盖度、
@@ -84,6 +85,7 @@ def document_search(
                 run_id=run_id,
                 node_name="document_search",
                 recorder=recorder,
+                parent_event_id=state.get("current_node_event_id"),
             )
             fetched.append(document)
         except Exception as exc:  # noqa: BLE001 —— 单篇读取失败不应中断检索

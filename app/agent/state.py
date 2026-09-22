@@ -119,6 +119,18 @@ class AgentState(TypedDict, total=False):
     errors: Annotated[list[str], operator.add]
     # 节点访问轨迹，便于测试断言"哪些节点被执行了、按什么顺序"
     visited_nodes: Annotated[list[str], operator.add]
+    # 当前正在执行的节点事件 ID。
+    #
+    # 由 ``_trace_node`` 在进入节点时写入，节点内的工具/模型调用
+    # 用它作为 ``parent_event_id`` —— 契约 TRACE_SCHEMA §5 规则 3
+    # 要求 ``tool_call`` / ``model_call`` **必须挂在发起它们的
+    # node 事件下**，否则 Trace 树退化成一条平铺列表，
+    # "哪个节点慢、哪个节点调了什么"就无法回答。
+    #
+    # 名字带 ``current_`` 前缀是刻意的：它在单次节点执行内有效，
+    # 不是整个 run 的属性。LangGraph 顺序执行节点，
+    # 因此不存在并发覆盖问题。
+    current_node_event_id: str
 
 
 __all__ = [

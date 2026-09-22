@@ -200,6 +200,7 @@ def invoke(
     node_name: str,
     recorder: Any | None = None,
     max_retries: int | None = None,
+    parent_event_id: str | None = None,
 ) -> Any:
     """调用一个工具，含校验、计时、落库与重试。
 
@@ -211,6 +212,9 @@ def invoke(
         recorder: ``TraceRecorder``（或兼容对象）。为 None 时跳过落库，
             便于纯逻辑单测。
         max_retries: 重试上限；默认取配置 ``TOOL_MAX_RETRIES``。
+        parent_event_id: 发起本次调用的 node 事件 ID。契约
+            TRACE_SCHEMA §5 规则 3 要求 ``tool_call`` 事件挂在
+            发起它的 ``node`` 之下，否则 Trace 树退化成平铺列表。
 
     Returns:
         工具实现体的返回值。
@@ -256,6 +260,7 @@ def invoke(
                 status="invalid_arguments",
                 error_code="INVALID_ARGUMENT",
                 duration_ms=0,
+                parent_event_id=parent_event_id,
             )
         raise InvalidToolArgumentsError(tool_name, errors) from exc
 
@@ -298,6 +303,7 @@ def invoke(
                 result_count=_result_count(result),
                 retry_count=attempt,
                 duration_ms=duration_ms,
+                parent_event_id=parent_event_id,
             )
         return result
 
@@ -318,6 +324,7 @@ def invoke(
             result_summary=summarize_text(f"{type(last_error).__name__}: {last_error}"),
             retry_count=max_retries,
             duration_ms=duration_ms,
+            parent_event_id=parent_event_id,
         )
 
     logger.warning(

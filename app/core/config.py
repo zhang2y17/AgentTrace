@@ -26,7 +26,21 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    """应用配置。字段与环境变量同名（大小写不敏感）。"""
+    """应用配置。字段与环境变量同名（大小写不敏感）。
+
+    .. warning::
+       **不要把 ``Settings`` 直接用作路由函数参数**。
+
+       它继承自 ``BaseSettings``（Pydantic 模型），而 FastAPI 的参数
+       分析规则是"Pydantic 模型类型 → 请求体字段"。即使写成
+       ``Annotated[Settings, Depends(get_settings)]``，它仍会被算作
+       一个 body 参数，导致 requestBody 变成
+       ``{"payload": {...}, "settings": {...}}``，与契约不符。
+
+       正确做法：路由只声明业务参数，配置由服务层持有
+       （``RunService`` / ``MetricsService`` 构造函数内取配置）。
+       需要配置本身时，用 ``app/api/deps.py`` 里以函数形式包装的依赖。
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",

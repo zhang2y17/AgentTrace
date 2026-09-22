@@ -73,6 +73,7 @@ def parse_question(
             cost_estimation_unavailable=response.cost_estimation_unavailable,
             status="ok",
             latency_ms=response.latency_ms,
+            parent_event_id=state.get("current_node_event_id"),
         )
 
     parsed = _parse_response(response.text, question)

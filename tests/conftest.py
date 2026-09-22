@@ -103,13 +103,33 @@ def repository(db_session):  # type: ignore[no-untyped-def]
 def client(settings) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
     """FastAPI 测试客户端。
 
-    使用 ``with`` 触发 lifespan（日志配置、探针注册、建表）。
+    使用 ``with`` 触发 lifespan（日志配置、探针注册、工具注册）。
+    建表不在 lifespan 里做 —— 本夹具把 ``AUTO_CREATE_TABLES`` 显式设为
+    true，让应用自身的建表路径被真实执行（而不是测试另起一套建表逻辑），
+    这样"应用能自己把表建起来"这件事每次都被验证。
     """
+    import os
+
+    from app.core.config import get_settings
+    from app.db.session import dispose_engine
     from app.main import create_app
 
+    previous = os.environ.get("AUTO_CREATE_TABLES")
+    os.environ["AUTO_CREATE_TABLES"] = "true"
+    get_settings.cache_clear()
+    dispose_engine()
+
     app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        if previous is None:
+            os.environ.pop("AUTO_CREATE_TABLES", None)
+        else:
+            os.environ["AUTO_CREATE_TABLES"] = previous
+        get_settings.cache_clear()
+        dispose_engine()
 
 
 def pytest_report_header(config: pytest.Config) -> list[str]:  # noqa: ARG001

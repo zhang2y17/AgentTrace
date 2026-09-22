@@ -29,6 +29,19 @@ from app.db.repository import TraceRepository
 logger = get_logger(__name__)
 
 
+def _split_parent(kwargs: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    """从调用参数里摘出 ``parent_event_id``，返回 (父事件 ID, 其余参数)。
+
+    ``parent_event_id`` 是 TraceEvent 的字段，而 ``record_tool_call`` /
+    ``record_model_call`` 的其余参数对应 ``tool_call`` / ``model_call``
+    **两张不同的表**。把不属于那张表的键透传过去会直接抛 TypeError，
+    因此必须显式分离，而不是依赖调用方每次都记得。
+    """
+    table_kwargs = dict(kwargs)
+    parent = table_kwargs.pop("parent_event_id", None)
+    return (str(parent) if parent else None), table_kwargs
+
+
 class TraceRecorder:
     """把运行过程写成 Trace 事件。
 
@@ -153,17 +166,140 @@ class TraceRecorder:
             )
 
     # ------------------------------------------------------------ 工具/模型
-    def record_tool_call(self, **kwargs: Any) -> Any:
-        """写工具调用记录。
+    #
+    # 下面两个方法**同时**写两张表，这不是冗余，而是契约要求的两层视图：
+    #
+    # - ``tool_call`` / ``model_call`` 是**宽表**：字段结构化
+    #   （token 数、校验结果、重试次数、成本），便于聚合查询与指标计算；
+    # - ``trace_event`` 是**事件流**：统一的时间线与父子关系，
+    #   让"一次 run 发生了什么、按什么顺序、谁触发了谁"可以用一条
+    #   ``ORDER BY sequence`` 回答。
+    #
+    # 早期实现只写了宽表，结果 Trace 里只剩 5 条 node 事件 ——
+    # ``GET /runs/{id}/events?event_type=tool_call`` 返回空，
+    # 而契约 TRACE_SCHEMA §5 明确要求 tool_call / model_call
+    # 挂在发起它们的 node 之下。因此这里补齐事件流这一侧。
 
-        委托给仓储层，签名与 ``TraceRepository.record_tool_call`` 一致。
-        工具注册表调用本方法，因此它必须存在且不改变语义。
+    def record_tool_call(self, **kwargs: Any) -> Any:
+        """写工具调用记录（宽表 + Trace 事件）。
+
+        委托给仓储层写 ``tool_call`` 表，再补一条 ``event_type=tool_call``
+        的 Trace 事件，父事件为当前 node。
+
+        工具调用是"点事件"：开始时就已经结束（含重试总耗时），
+        因此直接写终态而不留 ``running`` 中间态 ——
+        宽表里的 ``duration_ms`` 才是耗时的权威来源。
+
+        注意 ``parent_event_id`` **只用于事件流这一侧**：
+        它是 TraceEvent 的字段，不是 ToolCall 表的字段，
+        因此传给仓储前必须摘掉（见 ``_split_parent``）。
         """
-        return self.repository.record_tool_call(**kwargs)
+        parent_event_id, table_kwargs = _split_parent(kwargs)
+        record = self.repository.record_tool_call(**table_kwargs)
+
+        # 失败不阻断业务：Trace 事件是补充视图，
+        # 宽表已经落库，聚合查询不受影响。
+        try:
+            self._emit_child_event(
+                run_id=table_kwargs.get("run_id"),
+                event_type="tool_call",
+                name=str(table_kwargs.get("tool_name") or "tool_call"),
+                status=str(table_kwargs.get("status") or "ok"),
+                parent_event_id=parent_event_id,
+                input_summary=table_kwargs.get("arguments"),
+                output_summary=table_kwargs.get("result_summary"),
+                error_code=table_kwargs.get("error_code"),
+                attributes={
+                    "node_name": table_kwargs.get("node_name"),
+                    "tool_version": table_kwargs.get("tool_version"),
+                    "validated": table_kwargs.get("validated"),
+                    "retry_count": table_kwargs.get("retry_count", 0),
+                    "result_count": table_kwargs.get("result_count"),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "tool_call_trace_event_failed",
+                extra={
+                    "run_id": table_kwargs.get("run_id"),
+                    "tool_name": table_kwargs.get("tool_name"),
+                    "error_type": type(exc).__name__,
+                },
+            )
+        return record
 
     def record_model_call(self, **kwargs: Any) -> Any:
-        """写模型调用记录。委托给仓储层。"""
-        return self.repository.record_model_call(**kwargs)
+        """写模型调用记录（宽表 + Trace 事件）。"""
+        parent_event_id, table_kwargs = _split_parent(kwargs)
+        record = self.repository.record_model_call(**table_kwargs)
+
+        try:
+            self._emit_child_event(
+                run_id=table_kwargs.get("run_id"),
+                event_type="model_call",
+                name=str(table_kwargs.get("model_name") or "model_call"),
+                status=str(table_kwargs.get("status") or "ok"),
+                parent_event_id=parent_event_id,
+                input_summary=None,
+                output_summary=None,
+                error_code=table_kwargs.get("error_code"),
+                attributes={
+                    "node_name": table_kwargs.get("node_name"),
+                    "provider": table_kwargs.get("provider"),
+                    "is_test_double": table_kwargs.get("is_test_double"),
+                    "total_tokens": table_kwargs.get("total_tokens"),
+                    "latency_ms": table_kwargs.get("latency_ms"),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "model_call_trace_event_failed",
+                extra={
+                    "run_id": table_kwargs.get("run_id"),
+                    "model_name": table_kwargs.get("model_name"),
+                    "error_type": type(exc).__name__,
+                },
+            )
+        return record
+
+    def _emit_child_event(
+        self,
+        *,
+        run_id: Any,
+        event_type: str,
+        name: str,
+        status: str,
+        parent_event_id: str | None,
+        input_summary: Any = None,
+        output_summary: Any = None,
+        error_code: str | None = None,
+        attributes: dict[str, Any] | None = None,
+    ) -> str | None:
+        """写一条已终结的子事件（tool_call / model_call）。
+
+        与 ``error`` / ``final_result`` 一样属于"点事件"：
+        写入即终态，不留 ``running``。
+
+        ``run_id`` 缺失时跳过 —— 没有归属的事件会破坏外键语义，
+        记录下来比不记录更糟。
+        """
+        if not run_id:
+            return None
+
+        event = self.repository.append_event(
+            run_id=str(run_id),
+            event_type=event_type,
+            name=name,
+            status=status,
+            parent_event_id=parent_event_id,
+            input_summary=input_summary,
+            output_summary=output_summary,
+            error_code=error_code,
+            attributes={k: v for k, v in (attributes or {}).items() if v is not None},
+            summary_max_chars=self.summary_max_chars,
+        )
+        self.repository.close_event(event.event_id, status=status, error_code=error_code)
+        return event.event_id
 
     def record_error_event(
         self,

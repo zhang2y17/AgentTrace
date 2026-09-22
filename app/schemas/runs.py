@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.common import EventStatus, EventType, RunStatus
 
@@ -23,27 +23,18 @@ class CreateRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     question: str = Field(
-        min_length=1,
+        # 注意这里**不设 min_length**。空白问题在契约里要返回
+        # 422 AGENT_VALIDATION_ERROR，而 Pydantic 的校验失败会被
+        # 统一映射成 400 —— 若在 schema 层用 min_length=1 拦截，
+        # 空白问题就永远拿不到契约要求的 422。因此把"非空白"这一步
+        # 交给路由层与服务层判定（见 app/api/runs.py）。
         max_length=2000,
-        description="提交给 Agent 的问题。长度上限由 MAX_QUESTION_CHARS 控制。",
+        description="提交给 Agent 的问题。不能为空白，长度上限由 MAX_QUESTION_CHARS 控制。",
     )
     agent_version: str = Field(default="v1", max_length=40)
     prompt_version: str = Field(default="prompt-v1", max_length=40)
     top_k: int = Field(default=3, ge=1, le=10, description="检索条数")
     metadata: dict[str, Any] = Field(default_factory=dict, description="自由标签，仅存于运行上下文")
-
-    @field_validator("question")
-    @classmethod
-    def _reject_blank_question(cls, value: str) -> str:
-        """拒绝全空白问题。
-
-        契约 API_CONTRACT §2：question 为空白时返回 422 AGENT_VALIDATION_ERROR。
-        这里抛 ValueError 会被映射为 400；为了实现 422，服务层会再做一次检查
-        （见 app/api/runs.py），因为 Pydantic 校验失败统一走 400。
-        """
-        if not value.strip():
-            raise ValueError("question 不能为空白字符串")
-        return value
 
 
 class ReplayRequest(BaseModel):
@@ -54,18 +45,11 @@ class ReplayRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    question: str | None = Field(default=None, min_length=1, max_length=2000)
+    question: str | None = Field(default=None, max_length=2000)
     agent_version: str | None = Field(default=None, max_length=40)
     prompt_version: str | None = Field(default=None, max_length=40)
     top_k: int | None = Field(default=None, ge=1, le=10)
     note: str | None = Field(default=None, max_length=200, description="回放备注")
-
-    @field_validator("question")
-    @classmethod
-    def _reject_blank_question(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
-            raise ValueError("question 不能为空白字符串")
-        return value
 
 
 # ---------------------------------------------------------------------------

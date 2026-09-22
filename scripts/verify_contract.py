@@ -141,13 +141,25 @@ class ContractVerifier:
         )
 
     def check_api_endpoints(self) -> None:
-        """C-06：10 个 API 端点齐备。"""
+        """C-06：10 个 API 端点齐备。
+
+        注意 ``GET /docs``：它由 FastAPI 内置的 Swagger UI 挂载，
+        **不会**出现在 ``app.openapi()["paths"]`` 里（它自己不是被
+        OpenAPI 描述的资源）。因此对它的校验要在 ``app.routes``
+        上做，否则无论文档页是否可用都会被误报为缺失。
+        """
         try:
             from app.main import create_app
 
             app = create_app()
             schema = app.openapi()
             actual_paths = set(schema["paths"])
+            # 框架内置路由（/docs 等）只存在于 app.routes
+            mounted_paths = {
+                route.path
+                for route in app.routes
+                if getattr(route, "path", None) is not None
+            }
         except Exception as exc:  # noqa: BLE001
             self.add("C-06", "10 个 API 端点齐备", False, f"无法生成 OpenAPI: {exc}")
             return
@@ -156,10 +168,14 @@ class ContractVerifier:
         for endpoint in self.lock["api_endpoints"]:
             path = endpoint["path"]
             method = endpoint["method"].lower()
-            if path not in actual_paths:
+            if path in actual_paths:
+                if method not in schema["paths"][path]:
+                    missing.append(f"{endpoint['method']} {path}（路径存在但方法缺失）")
+            elif path in mounted_paths:
+                # 框架内置页面（如 /docs），路径存在即视为齐备
+                continue
+            else:
                 missing.append(f"{endpoint['method']} {path}")
-            elif method not in schema["paths"][path]:
-                missing.append(f"{endpoint['method']} {path}（路径存在但方法缺失）")
 
         self.add(
             "C-06",
