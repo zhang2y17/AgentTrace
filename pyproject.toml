@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agenttrace"
 version = "0.1.0"
-description = "LLM Agent 执行过程的记录、回放、评测与质量门禁平台（个人独立开发项目）"
+description = "LLM Agent 可观测性、回放、离线评测与质量门禁平台"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

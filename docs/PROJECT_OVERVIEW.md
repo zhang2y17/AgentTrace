@@ -1,6 +1,6 @@
 # AgentTrace 项目介绍
 
-AgentTrace 是一个围绕 LLM Agent 执行过程构建的后端工程实践项目。它以五节点文档研究 Agent 为示例，将运行记录、节点与调用追踪、重新运行、离线评测和质量门禁串成一条可追溯的链路。
+AgentTrace 是一个面向 LLM Agent 执行过程的可观测性与质量评测平台。系统通过五节点文档研究 Agent 串联运行记录、节点与调用追踪、重新运行、离线评测和质量门禁，形成完整的可追溯链路。
 
 项目采用 Python、FastAPI、LangGraph、Pydantic v2 与 SQLAlchemy 2.x，提供 HTTP API、Swagger UI 和评测命令行。默认使用本地 Fake LLM，无需模型密钥即可验证流程；这些结果只说明流程与逻辑表现，不代表真实模型能力或生产效果。
 
