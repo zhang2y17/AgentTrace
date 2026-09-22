@@ -145,7 +145,7 @@ app/
 └── evaluation/                # 离线评测
     ├── dataset.py             # JSONL 加载与校验
     ├── runner.py              # 逐 case 执行、结果落库
-    ├── metrics.py             # 10 个指标的计算公式实现
+    ├── metrics.py             # 12 个指标的计算公式实现（M1~M10 编号）
     └── gate.py                # 阈值门禁
 ```
 

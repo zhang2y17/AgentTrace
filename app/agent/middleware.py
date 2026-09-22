@@ -243,11 +243,22 @@ class TraceRecorder:
                 input_summary=None,
                 output_summary=None,
                 error_code=table_kwargs.get("error_code"),
+                # 契约 D-06 要求 model_call 事件含**三个** token 字段。
+                # 早先这里只带了 ``total_tokens``，另外两个被漏掉 ——
+                # 宽表 `model_call` 里其实是齐全的（prompt/completion/total
+                # 都有列且都有值），只是事件 attributes 少抄了两项。
+                # 后果是"从 Trace 还原一次模型调用的用量"这条路径断掉：
+                # 只能看到总数，看不到输入/输出的分布 —— 而后者才是
+                # 判断"是 prompt 太长还是输出失控"的依据。
                 attributes={
                     "node_name": table_kwargs.get("node_name"),
                     "provider": table_kwargs.get("provider"),
                     "is_test_double": table_kwargs.get("is_test_double"),
+                    "prompt_tokens": table_kwargs.get("prompt_tokens"),
+                    "completion_tokens": table_kwargs.get("completion_tokens"),
                     "total_tokens": table_kwargs.get("total_tokens"),
+                    "estimated_cost_usd": table_kwargs.get("estimated_cost_usd"),
+                    "cost_estimation_unavailable": table_kwargs.get("cost_estimation_unavailable"),
                     "latency_ms": table_kwargs.get("latency_ms"),
                 },
             )

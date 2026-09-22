@@ -58,7 +58,7 @@ flowchart TB
 
     subgraph Eval["评测层 (app/evaluation)"]
         DS["JSONL 评测集"]
-        MET["10 个指标"]
+        MET["12 个指标"]
         GATE["质量门禁"]
     end
 

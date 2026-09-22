@@ -19,7 +19,7 @@
 
 - 目录：`data/eval/`
 - 文件：`<dataset_version>.jsonl`，一行一个 case
-- 当前版本：`doc_research_v1.jsonl`（12 个 case）
+- 当前版本：`doc_research_v1.jsonl`（14 个 case）
 
 ### 1.2 Case Schema
 
@@ -51,11 +51,17 @@
 
 ### 1.3 评测集的真实性声明
 
-`doc_research_v1.jsonl` 中的问题由**本项目作者针对本仓库自建的 6 篇样例文档**编写，属于**合成评测集**。它不来自任何真实用户日志、不包含任何公司业务数据。规模小（12 case）是刻意的：目的是让每个 case 都能被人工核对。
+`doc_research_v1.jsonl` 中的问题由**本项目作者针对本仓库自建的 6 篇样例文档**编写，属于**合成评测集**。它不来自任何真实用户日志、不包含任何公司业务数据。规模小（14 case）是刻意的：目的是让每个 case 都能被人工核对。
 
 ---
 
 ## 2. 指标总览
+
+> **编号 ≠ 指标名数量。** 下表用 **M1 ~ M10** 十个编号组织，但 M6（延迟分位数）
+> 展开为 `latency_ms_p50` / `latency_ms_p95` / `latency_ms_mean` 三个独立指标名。
+> 因此 `metrics` 响应里实际有 **12 个键**，`contract.lock.json` 锁定的也是这 12 个名字。
+> 引用"指标数"时请说明是 **M 编号数（10）** 还是 **指标名数（12）**，
+> 两者都对，混用会让人以为文档与实现不一致。
 
 | # | 指标 | 类型 | 方向 | 数据来源 |
 |---|---|---|---|---|
@@ -64,7 +70,7 @@
 | M3 | `tool_selection_accuracy` | 比率 | ↑ | eval_run + tool_call |
 | M4 | `tool_argument_accuracy` | 比率 | ↑ | eval_run + tool_call |
 | M5 | `evidence_coverage` | 均值 | ↑ | eval_run |
-| M6 | `latency_ms_p50` / `p95` | 分位数 | ↓ | eval_run.latency_ms |
+| M6 | `latency_ms_p50` / `p95` / `mean` | 分位数 | ↓ | eval_run.latency_ms |
 | M7 | `total_tokens` | 计数 | — | eval_run.total_tokens |
 | M8 | `estimated_cost_usd` | 金额 | ↓ | eval_run.estimated_cost_usd |
 | M9 | `error_rate` | 比率 | ↓ | eval_run |
@@ -260,7 +266,7 @@ flowchart TD
     H --> I["写入 eval_run 行<br/>含 failure_reason, assertion_results"]
     I --> J{"还有 case?"}
     J -- 是 --> D
-    J -- 否 --> K["metrics.py 计算 10 个指标"]
+    J -- 否 --> K["metrics.py 计算 12 个指标"]
     K --> L["写入批次结果，返回 evaluation_id"]
 ```
 
@@ -289,7 +295,7 @@ flowchart TD
 
 三个维度可任意组合分组：`agent_version`、`prompt_version`、`model_name`。
 
-对比通过 `GET /metrics/summary?group_by=<dimension>` 得到各组的 10 个指标，然后逐指标看差异。
+对比通过 `GET /metrics/summary?group_by=<dimension>` 得到各组的 12 个指标，然后逐指标看差异。
 
 **回归判定建议**（不强制，由使用者按项目需要定义）：若新版本在 `task_completion_rate`、`tool_selection_accuracy`、`tool_argument_accuracy` 中任一指标下降超过 5 个百分点，或 `latency_ms_p95` 上升超过 30%，视为疑似回归。
 

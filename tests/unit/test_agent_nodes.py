@@ -521,6 +521,63 @@ class TestAnswerWriter:
         assert len(recorder.calls) == 1
         assert recorder.calls[0]["is_test_double"] is True
 
+    def test_model_call_carries_all_three_token_fields(self, db_session: Any) -> None:
+        """``model_call`` 的 Trace 事件必须含**三个** token 字段。
+
+        契约 D-06 的判据是"三个 token 字段非 null 且成本有值"。
+        这条测试锁的是一个真实的漏抄缺陷：宽表 ``model_call`` 里
+        ``prompt_tokens`` / ``completion_tokens`` / ``total_tokens``
+        三列齐全且都有值，但写 Trace 事件时 ``attributes`` 只抄了
+        ``total_tokens``，另外两个被漏掉。
+
+        为什么单看宽表发现不了：宽表是对的。问题只出在**事件那份副本**上，
+        而"从 Trace 还原一次模型调用"正是这个项目对外承诺的能力 ——
+        缺了输入/输出两个分量，就只能看到总数，无法判断"是 prompt 太长
+        还是输出失控"。
+        """
+        from app.agent.middleware import TraceRecorder
+        from app.db.repository import TraceRepository
+
+        repository = TraceRepository(db_session)
+        run = repository.create_run(
+            question="测试 model_call 字段完整性",
+            status="running",
+            agent_version="1.0.0",
+            prompt_version="1.0.0",
+            llm_provider="fake",
+            is_test_double=True,
+        )
+        recorder = TraceRecorder(repository)
+        recorder.record_model_call(
+            run_id=run.id,
+            node_name="answer_writer",
+            provider="fake",
+            model_name="fake-echo-1",
+            is_test_double=True,
+            prompt_tokens=1000,
+            completion_tokens=234,
+            total_tokens=1234,
+            estimated_cost_usd=0.0001,
+            cost_estimation_unavailable=False,
+            status="ok",
+            latency_ms=7,
+        )
+
+        events, _total = repository.list_events(run.id)
+        model_events = [e for e in events if e.event_type == "model_call"]
+        assert len(model_events) == 1, "应写入恰好一条 model_call 事件"
+
+        attributes = model_events[0].attributes or {}
+        for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            assert field in attributes, f"attributes 缺少 {field}"
+            assert attributes[field] is not None, f"{field} 不应为 null"
+
+        assert attributes["prompt_tokens"] == 1000
+        assert attributes["completion_tokens"] == 234
+        assert attributes["total_tokens"] == 1234
+        # 成本"不可估算"与成本为 0 是两件事，必须都能从事件读到。
+        assert attributes["cost_estimation_unavailable"] is False
+
 
 # ---------------------------------------------------------------------------
 # 节点 5：final_validator

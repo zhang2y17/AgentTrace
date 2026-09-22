@@ -119,6 +119,72 @@ class TestRedactMapping:
         assert isinstance(result["count"], int)
         assert isinstance(result["flag"], bool)
 
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "total_tokens",
+            "prompt_tokens",
+            "completion_tokens",
+            "token_count",
+            "tokens_used",
+            "max_tokens",
+        ],
+    )
+    def test_token_counting_fields_are_not_redacted(self, key: str) -> None:
+        """``*_tokens`` 是**计量字段**，值必须原样保留。
+
+        这是一个真实的缺陷回归测试。脱敏规则曾把 ``"token"`` 当作普通子串
+        放进敏感词表，于是 ``total_tokens`` 等键名全部命中 —— 一个整数值
+        被整体替换成 ``[REDACTED_TOKEN]``，Trace 里的 token 用量彻底不可读，
+        而且**不可逆**（替换发生在写入时）。
+
+        判据不能只看"值还在"，还要看**类型没被改成字符串**：
+        字符串化的 ``"1234"`` 同样能让 ``!= "[REDACTED_TOKEN]"`` 成立，
+        但已经破坏了字段类型。
+        """
+        result = redact_mapping({key: 1234})
+
+        assert result[key] == 1234, f"{key} 被误判为敏感键并替换了值"
+        assert isinstance(result[key], int), f"{key} 的类型被改成 {type(result[key])}"
+
+    def test_token_word_boundary_does_not_break_real_credentials(self) -> None:
+        """收紧 ``token`` 匹配后，真正的凭证字段**必须**仍然命中。
+
+        这条与上面那条是一对：只测一边就会走向另一个极端 ——
+        为了让 ``total_tokens`` 不被误伤而把 ``token`` 从敏感词里删掉，
+        结果是 ``access_token`` 的真实凭证被原样写进 Trace。
+        """
+        for key, expected in {
+            "token": "[REDACTED_TOKEN]",
+            "access_token": "[REDACTED_TOKEN]",
+            "authToken": "[REDACTED_TOKEN]",
+            "refresh_token": "[REDACTED_TOKEN]",
+            "id_token": "[REDACTED_TOKEN]",
+        }.items():
+            result = redact_mapping({key: "real-credential-value"})
+            assert result[key] == expected, f"{key} 未被脱敏，得到 {result[key]!r}"
+
+    def test_realistic_model_call_attributes_survive_redaction(self) -> None:
+        """端到端形态：一次 ``model_call`` 的 attributes 走完脱敏后应基本不变。
+
+        契约 D-06 要求 ``model_call`` 落库含三个 token 字段且非 null。
+        这条测试锁住的是**整条链路在真实数据形状下的行为** ——
+        单键测试只能证明规则本身，证明不了"真实调用链里不会互相干扰"。
+        """
+        attrs = {
+            "node_name": "question_parser",
+            "provider": "fake",
+            "is_test_double": True,
+            "total_tokens": 1234,
+            "prompt_tokens": 1000,
+            "completion_tokens": 234,
+            "latency_ms": 1,
+            "estimated_cost_usd": 0.0001,
+        }
+        result = redact_mapping(attrs)
+
+        assert result == attrs
+
     def test_arbitrary_object_falls_back_to_repr(self) -> None:
         """自定义对象应降级为 repr 后脱敏，而非抛错或原样保留。"""
 

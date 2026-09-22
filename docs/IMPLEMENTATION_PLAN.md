@@ -25,7 +25,7 @@
 3. 6 类 `event_type` 与 8 个 `EventStatus`；
 4. `trace_event` 的 12 个必需字段；
 5. 10 个 API 端点路径；
-6. 10 个指标名与公式；
+6. 12 个指标名与公式（M1~M10 编号，M6 展开为三个分位数）；
 7. SQLAlchemy 2.x（非 SQLModel）；
 8. ID 前缀与 ULID 规则。
 
@@ -145,10 +145,10 @@ python -m pytest tests -q
 
 **任务清单**
 
-1. `data/eval/doc_research_v1.jsonl`：12 个 case，覆盖正常、参数错误、证据不足、失败路径；
+1. `data/eval/doc_research_v1.jsonl`：14 个 case，覆盖正常、参数错误、证据不足、失败路径；
 2. `app/evaluation/dataset.py`：加载 + schema 校验（含行号报错）；
 3. `app/evaluation/assertions.py`：7 个断言实现；
-4. `app/evaluation/metrics.py`：10 个指标公式（严格按 EVALUATION.md §3）；
+4. `app/evaluation/metrics.py`：12 个指标公式（严格按 EVALUATION.md §3）；
 5. `app/evaluation/pricing.py`：价目表 + `estimate_cost`；
 6. `app/evaluation/runner.py`：逐 case 执行、判定、落库；
 7. `app/evaluation/gate.py`：阈值校验、违规项生成、阈值快照；

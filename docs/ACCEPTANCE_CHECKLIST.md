@@ -46,7 +46,7 @@
 | C-04 | `trace_event` 12 个必需字段齐备 | 对比模型列与 TRACE_SCHEMA §3 | 无遗漏 | AUTO | |
 | C-05 | 8 张表齐备 | 对比 `Base.metadata.tables` 与 DATA_MODEL §2 | 8 张，无多余 | AUTO | |
 | C-06 | 10 个 API 端点齐备 | 读 `/openapi.json` 的 paths | 10 条路径全部存在 | AUTO | |
-| C-07 | 10 个指标名一致 | 对比 `metrics.py` 导出与 EVALUATION §2 | 完全一致 | AUTO | |
+| C-07 | 12 个指标名一致（M1~M10 编号，M6 展开三分位数） | 对比 `metrics.py` 导出与 EVALUATION §2 | 完全一致 | AUTO | |
 | C-08 | ID 前缀符合 DATA_MODEL §4 | 检查 `core/ids.py` | 前缀与文档一致 | AUTO | |
 
 ## D. 功能：运行与 Trace
@@ -83,8 +83,8 @@
 
 | ID | 检查项 | 验证方式 | 通过判据 | 类别 | 结果 |
 |---|---|---|---|---|---|
-| F-01 | 评测集可加载并通过 schema 校验 | `python scripts/run_eval.py --dataset doc_research_v1` | 退出码 0，case 数 = 12 | AUTO | |
-| F-02 | 10 个指标全部产出 | 查看评测响应 `metrics` | 10 个键全部存在且非缺失 | AUTO | |
+| F-01 | 评测集可加载并通过 schema 校验 | `python scripts/run_eval.py --dataset doc_research_v1` | 退出码 0，case 数 = 14 | AUTO | |
+| F-02 | 12 个指标全部产出 | 查看评测响应 `metrics` | 12 个契约指标键全部存在且非缺失 | AUTO | |
 | F-03 | 指标公式与 EVALUATION §3 一致 | 单测对照手算值 | 误差 < 1e-9 | AUTO | |
 | F-04 | 分母为 0 时返回 `null` 而非崩溃 | 空评测集单测 | `null`，无异常 | AUTO | |
 | F-05 | 失败 case 保存原因 | `GET /evaluations/{id}?include_cases=true&only_failures=true` | 每条含 `failure_reason` + `assertion_results` | AUTO | |
@@ -140,7 +140,7 @@
 | I-09 | `docs/PROJECT_SPEC.md` 等 7 份设计文档 | AUTO | |
 | I-10 | `scripts/init_db.py` + `scripts/seed_data.py` | AUTO | |
 | I-11 | `data/sample_docs/*.md`（≥6 篇） | AUTO | |
-| I-12 | `data/eval/doc_research_v1.jsonl`（12 case） | AUTO | |
+| I-12 | `data/eval/doc_research_v1.jsonl`（14 case） | AUTO | |
 | I-13 | `tests/unit` + `tests/api` + `tests/smoke` + `tests/integration` | AUTO | |
 | I-14 | `docs/diagrams/agent_flow.mmd` + `eval_flow.mmd` | AUTO | |
 | I-15 | `.github/workflows/ci.yml`（lint + pytest + compose config） | AUTO | |

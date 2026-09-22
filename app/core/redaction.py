@@ -132,6 +132,13 @@ def redact_mapping(data: Mapping[str, Any]) -> dict[str, Any]:
 
 # 敏感键名的判定：键名中**包含**任一敏感词即判定为敏感。
 # 用包含而非相等，是为了覆盖 `db_password`、`openai_api_key`、`authToken` 等变体。
+#
+# **注意 `token` 不在这张表里**，它单独处理，原因见 `_is_token_word`。
+# 早先版本把它当普通子串放在这里，结果是 `total_tokens`、`prompt_tokens`、
+# `completion_tokens`、`max_tokens` 这些**计数字段**全部被误判为密钥 ——
+# 整数值被整体替换成 `[REDACTED_TOKEN]`，Trace 里的 token 用量彻底不可读。
+# 这是"宁可错杀"式保守策略的反面：过度匹配会把正常数据也毁掉，
+# 而毁掉的数据是不可逆的（写入时就已替换）。
 _SENSITIVE_KEY_TOKENS: tuple[str, ...] = (
     "apikey",
     "access_token",
@@ -146,7 +153,6 @@ _SENSITIVE_KEY_TOKENS: tuple[str, ...] = (
     "password",
     "passwd",
     "pwd",
-    "token",
     # 裸键名 "key" 需单独判断（不能用子串匹配，否则 monkey/turnkey 会误伤）
     "api_key",
 )
@@ -157,13 +163,54 @@ _SENSITIVE_KEY_PATTERN = re.compile(
 # 去掉分隔符后再判断，覆盖 api-key / apiKey / api_key 三种写法
 _SENSITIVE_KEY_NORMALIZED = re.compile(r"[^a-z0-9]")
 
+# `token` 作为**独立词**出现时才算敏感键。
+#
+# 关键是区分两种含义完全不同的命名：
+# - **凭证义**：`token` / `access_token` / `authToken` / `refresh_token`
+#   —— 值是一串凭证，必须脱敏；
+# - **计量义**：`total_tokens` / `prompt_tokens` / `completion_tokens` / `max_tokens`
+#   —— 值是**数字**，是 Trace 与评测的核心指标，绝不能脱敏。
+#
+# 两者的词形差异在**单复数**：凭证义几乎总是单数 `token`，
+# 计量的"数量"义几乎总是复数 `tokens`。因此判据是
+# "以 `token` 结尾"而非"包含 `token`"：
+# - `token`      → 以 token 结尾 ✓ 敏感
+# - `access_token` → 以 token 结尾 ✓ 敏感
+# - `authtoken`  → 归一化后 `authtoken`，以 token 结尾 ✓ 敏感
+# - `total_tokens` → 以 **tokens** 结尾 ✗ 不敏感
+# - `token_count` → `token` 不在结尾 ✗ 不敏感（值本就是计数）
+#
+# 边界说明：`token_count` 这类"单数 token + 计量后缀"的命名属于少数派。
+# 它被判为不敏感是刻意的 —— 它的值一定是数字，脱敏只会造成数据损坏。
+# 若某个真实凭证字段恰好叫 `token_count`，那是命名误导，应由改名声而非放宽规则解决。
+_TOKEN_SUFFIX = "token"
+
+
+def _is_token_word(normalized: str) -> bool:
+    """判断归一化后的键名是否表示**凭证义**的 token。
+
+    只认"以 ``token`` 结尾"且不是复数的情形，
+    从而放过 ``total_tokens`` / ``token_count`` 这类计量命名。
+
+    Args:
+        normalized: 已去掉全部分隔符并转小写的键名。
+
+    Returns:
+        是凭证义 token 时为 True。
+    """
+    # ``tokens``（复数）是计量的"数量"义，一律放过；其余以 ``token`` 结尾的视为凭证。
+    return normalized.endswith(_TOKEN_SUFFIX) and not normalized.endswith("tokens")
+
 
 def _is_sensitive_key(key: str) -> bool:
     """判断键名是否表示敏感信息。
 
     判定顺序：
     1. 去掉分隔符后做子串匹配，覆盖 apiKey / api-key / api_key / dbPassword 等；
-    2. 键名恰好是裸 ``key`` 时也判为敏感。
+    2. ``token`` 单独按"词尾"判定，放过 ``*_tokens`` 计量字段；
+    3. 键名恰好是裸 ``key`` 时也判为敏感。
+
+    这里的顺序不重要，三个分支互不重叠；列出是为了说明覆盖了哪些形态。
     """
     if not key:
         return False
@@ -172,6 +219,8 @@ def _is_sensitive_key(key: str) -> bool:
     normalized = _SENSITIVE_KEY_NORMALIZED.sub("", lowered)
 
     if _SENSITIVE_KEY_PATTERN.search(lowered):
+        return True
+    if _is_token_word(normalized):
         return True
     if normalized == "key":
         return True
