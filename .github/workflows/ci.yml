@@ -1,0 +1,146 @@
+name: CI
+
+# 契约 T12 / SECURITY：CI **不依赖任何密钥**，不访问网络模型接口。
+# 真实 LLM 集成测试在 CI 中默认不运行（无密钥），只在本地显式开启。
+
+on:
+  push:
+    branches: ["main", "master", "dev"]
+  pull_request:
+    branches: ["main", "master", "dev"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # 测试环境显式使用替身，避免任何意外网络调用
+  LLM_PROVIDER: fake
+  ENABLE_REAL_LLM_TESTS: "false"
+  ENVIRONMENT: ci
+  # CI 用 SQLite，避免依赖外部 PostgreSQL 服务（离线可复现）
+  DATABASE_URL: sqlite+pysqlite:///./ci_test.db
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install "ruff>=0.6,<1"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format check
+        run: ruff format --check .
+
+  test:
+    name: Test (pytest, 测试替身模式)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit + api + smoke tests
+        # 默认不跑 markers=integration（需要真实 PostgreSQL/Redis/LLM）
+        run: python -m pytest tests -q -m "not integration"
+
+      - name: Upload test summary
+        if: always()
+        run: python -m pytest tests -q -m "not integration" --tb=no -rN 2>&1 | tail -5
+
+  compose-config:
+    name: Docker Compose config validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml syntax
+        # 只校验语法与变量插值，不实际启动容器
+        run: docker compose config --quiet
+
+      - name: Verify expected services exist
+        run: |
+          services=$(docker compose config --services | sort | tr '\n' ' ')
+          echo "services: $services"
+          for expected in api postgres redis; do
+            echo "$services" | grep -q "$expected" \
+              || { echo "缺少服务: $expected"; exit 1; }
+          done
+
+  contract-check:
+    name: 契约一致性检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 校验代码与 docs/contract.lock.json 一致
+        run: python scripts/verify_contract.py
+
+  secret-scan:
+    name: 密钥与敏感信息扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查是否有真实密钥被提交
+        run: |
+          set -e
+          # 允许出现的假密钥位于测试与文档中，需带明显的 test/fake/example 上下文
+          matches=$(grep -rInE 'sk-[A-Za-z0-9]{20,}' \
+            --include='*.py' --include='*.md' --include='*.yml' --include='*.json' \
+            . 2>/dev/null | grep -vE 'sk-abc|sk-test|REDACTED|example|fake|测试' || true)
+          if [ -n "$matches" ]; then
+            echo "发现疑似真实密钥："
+            echo "$matches"
+            exit 1
+          fi
+          echo "未发现疑似真实密钥。"
+
+      - name: 检查 .env 未被提交
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo ".env 被提交到仓库，违反契约 B8"
+            exit 1
+          fi
+          echo ".env 未被跟踪。"
+
+      - name: 检查是否出现公司名称或内部域名
+        run: |
+          set -e
+          matches=$(grep -rInE '\b(tencent|bytedance|alibaba|baidu)\b|\.internal\b|\.corp\b' \
+            --include='*.py' --include='*.md' --include='*.yml' \
+            --include='*.json' --include='*.toml' . 2>/dev/null \
+            | grep -vE 'denylist|scripts/verify_contract|SECURITY.md|CONTRIBUTING.md|禁止|检查' || true)
+          if [ -n "$matches" ]; then
+            echo "发现公司名称或内部域名："
+            echo "$matches"
+            exit 1
+          fi
+          echo "未发现公司名称或内部域名。"
