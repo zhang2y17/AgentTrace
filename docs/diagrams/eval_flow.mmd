@@ -27,7 +27,7 @@ flowchart TD
     JUDGE --> I["写入 eval_run 行<br/>含 failure_reason + assertion_results + run_id"]
     I --> E
 
-    M["metrics.py 计算 10 个指标"]
+    M["metrics.py 计算 12 个输出指标"]
     M --> M1["run_success_rate<br/>task_completion_rate<br/>tool_selection_accuracy<br/>tool_argument_accuracy<br/>evidence_coverage"]
     M --> M2["latency_ms_p50 / p95 / mean<br/>（nearest-rank，无插值）"]
     M --> M3["total_tokens<br/>estimated_cost_usd（价目表）"]

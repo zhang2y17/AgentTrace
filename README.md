@@ -20,69 +20,67 @@ AgentTrace 把这些问题变成**可查询、可回放、可量化、可设门�
 
 ## 架构
 
+面向新读者的[项目介绍](docs/PROJECT_OVERVIEW.md)与[GitHub 发布准备清单](docs/GITHUB_READINESS.md)。下图按当前代码整理，虚线表示事件记录、条件分支或补充关系，具体含义见边上的说明。
+
 ```mermaid
 flowchart TB
-    subgraph Client["调用方"]
-        CLI["curl / HTTP 客户端"]
+    C["调用方：HTTP / Swagger UI"] --> API["FastAPI 路由与 Pydantic 契约<br/>app/api · app/schemas"]
+    CLI["评测命令行<br/>scripts/run_eval.py"] --> ES
+
+    subgraph S["应用服务层 · app/services"]
+        RS["RunService<br/>执行 / 查询 / 重新运行"]
+        ES["EvaluationService<br/>评测批次 / 查询 / 门禁"]
+        MS["metrics_service<br/>运行指标汇总"]
     end
+    API --> RS
+    API --> ES
+    API --> MS
+    ES --> ER["EvaluationRunner<br/>逐 case 执行与断言"]
+    DS["JSONL 评测集<br/>data/eval"] --> ER
+    ER --> RS
+    ER --> EM["评测指标聚合<br/>12 个输出指标"]
+    ES --> GT["质量门禁<br/>阈值与观测值比较"]
+    EM -.-> GT
 
-    subgraph API["FastAPI (app/api)"]
-        A1["GET /health"]
-        A2["POST /runs"]
-        A3["GET /runs/{id}"]
-        A4["GET /runs/{id}/events"]
-        A5["POST /runs/{id}/replay"]
-        A6["POST /evaluations"]
-        A7["GET /evaluations/{id}"]
-        A8["GET /metrics/summary"]
-        A9["POST /quality-gates/check"]
+    subgraph G["LangGraph · 五节点文档研究 Agent"]
+        Q["question_parser<br/>问题解析"] --> D["document_search<br/>关键词检索与取文档"]
+        D --> E["evidence_checker<br/>证据检查"]
+        E --> W["answer_writer<br/>生成带引用的答案"]
+        W --> V["final_validator<br/>答案与引用校验"]
+        E -. "证据不足且有重试额度" .-> D
     end
+    RS --> Q
+    Q --> LLM["LLM Provider<br/>fake / OpenAI-compatible / Ollama"]
+    W --> LLM
+    D --> TR["工具注册表<br/>参数校验 / 计时 / 重试"]
+    TR --> DT["search_documents / get_document"]
+    DT --> DOC["6 篇合成样例文档<br/>data/sample_docs"]
+    TR -. "已注册，当前图未调用" .-> AT["calculate_latency_summary<br/>calculate_cost_summary"]
 
-    subgraph Agent["Agent 层 (app/agent)"]
-        G["LangGraph 工作流"]
-        N1["1 question_parser"]
-        N2["2 document_search"]
-        N3["3 evidence_checker"]
-        N4["4 answer_writer"]
-        N5["5 final_validator"]
-        MW["Trace 中间件"]
-    end
+    G -. "节点 / 模型 / 工具事件" .-> REC["TraceRecorder<br/>父子事件 / 摘要脱敏"]
+    REC --> REP["Repository"]
+    RS --> REP
+    MS --> REP
+    REP --> ORM["SQLAlchemy 模型与 Session"]
+    ER --> ORM
+    ES --> ORM
+    ORM --> DB[("PostgreSQL 16<br/>测试可用 SQLite<br/>8 张业务表")]
 
-    subgraph Tools["工具层 (app/tools)"]
-        REG["统一注册表 + Pydantic 校验"]
-        T1["search_documents"]
-        T2["get_document"]
-        T3["calculate_latency_summary"]
-        T4["calculate_cost_summary"]
-    end
+    API --> HP["基础设施健康探针"]
+    HP --> DB
+    HP --> CACHE["TaskStateCache / Redis 探活"]
+    CACHE --> RD[("Redis 7<br/>可选短期状态基础能力")]
+    NOTE["当前 RunService 未接入状态缓存写入<br/>Redis 不缓存最终答案"] -.-> CACHE
+    CORE["横切能力：环境配置 / ID / JSON 日志 / 脱敏 / 错误映射"] -.-> S
 
-    subgraph Eval["评测层 (app/evaluation)"]
-        DS["JSONL 评测集"]
-        MET["12 个指标"]
-        GATE["质量门禁"]
-    end
-
-    subgraph Data["数据层 (app/db)"]
-        REPO["Repository"]
-        MODELS["SQLAlchemy 2.x 模型"]
-    end
-
-    PG[("PostgreSQL")]
-    RD[("Redis<br/>短期任务状态")]
-
-    CLI --> API
-    A2 --> G
-    A5 --> G
-    G --> N1 --> N2 --> N3 --> N4 --> N5
-    N2 --> REG
-    REG --> T1 & T2 & T3 & T4
-    N3 -.条件边：证据不足则放宽检索.-> N2
-    G --> MW
-    MW --> REPO
-    REPO --> MODELS --> PG
-    Agent -.状态.-> RD
-    A6 --> DS --> MET --> GATE
-    MET --> REPO
+    classDef service fill:#eaf2ff,stroke:#4878bd,color:#172c4c;
+    classDef agent fill:#eaf8f0,stroke:#3c9266,color:#163d29;
+    classDef data fill:#fff4dc,stroke:#b48a30,color:#513c12;
+    classDef note fill:#f5f5f5,stroke:#999,color:#444;
+    class RS,ES,MS,API service;
+    class Q,D,E,W,V agent;
+    class DB,RD,DOC,DS data;
+    class NOTE,CORE note;
 ```
 
 Agent 工作流细节见 [`docs/diagrams/agent_flow.mmd`](docs/diagrams/agent_flow.mmd)，
@@ -106,7 +104,8 @@ Agent 工作流细节见 [`docs/diagrams/agent_flow.mmd`](docs/diagrams/agent_fl
 ### 方式一：Docker Compose（推荐）
 
 ```bash
-git clone <your-repo-url> agenttrace && cd agenttrace
+git clone https://github.com/zhang2y17/AgentTrace.git agenttrace
+cd agenttrace
 cp .env.example .env
 
 docker compose up -d --build
@@ -155,7 +154,7 @@ curl -s "http://localhost:8000/runs/<run_id>/events?event_type=node"
 # 只看失败与重试
 curl -s "http://localhost:8000/runs/<run_id>/events?status=failed,retried"
 
-# 回放（换一版 Prompt，生成新 run_id，保留 source_run_id）
+# 回放（生成新 run_id，保留 source_run_id；prompt_version 当前为版本标签）
 curl -s -X POST "http://localhost:8000/runs/<run_id>/replay" \
   -H "Content-Type: application/json" \
   -d '{"prompt_version":"prompt-v2","note":"对比 prompt-v2"}'
@@ -197,7 +196,7 @@ ruff format --check .
 python scripts/verify_contract.py
 
 # 需要真实 PostgreSQL / Redis 的集成测试（默认跳过）
-python -m pytest tests/integration -q
+python -m pytest tests/integration -q -m integration
 
 # 需要真实 LLM 的集成测试（默认跳过，需自行配置密钥）
 ENABLE_REAL_LLM_TESTS=true LLM_PROVIDER=openai LLM_API_KEY=sk-... \
@@ -245,6 +244,7 @@ echo "退出码: $?"
 | 文档 | 内容 |
 |---|---|
 | [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md) | 项目契约：边界、节点、工具、数据模型、交付物 |
+| [`docs/PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md) | 面向新读者的项目定位、工作流程与实现边界 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 架构、分层规则、时序、错误模型、配置 |
 | [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) | 8 张表的字段级定义、关系、ID 规则 |
 | [`docs/TRACE_SCHEMA.md`](docs/TRACE_SCHEMA.md) | 6 类事件、12 个必需字段、状态语义、脱敏规则 |
@@ -252,6 +252,10 @@ echo "退出码: $?"
 | [`docs/EVALUATION.md`](docs/EVALUATION.md) | 指标公式、断言、门禁、替身边界、反模式 |
 | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | 8 阶段实施计划与风险清单 |
 | [`docs/ACCEPTANCE_CHECKLIST.md`](docs/ACCEPTANCE_CHECKLIST.md) | 验收清单（含类别与验证方式） |
+| [`docs/DEMO.md`](docs/DEMO.md) | 可复现的运行、Trace、评测与门禁演示 |
+| [`docs/GITHUB_READINESS.md`](docs/GITHUB_READINESS.md) | GitHub 发布前检查清单 |
+| [`ROADMAP.md`](ROADMAP.md) | 近期与中期计划，明确区分计划和已实现功能 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本变更记录 |
 | [`SECURITY.md`](SECURITY.md) | 密钥、日志、数据边界与威胁模型 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献说明 |
 
@@ -271,6 +275,9 @@ echo "退出码: $?"
 10. **人工接管（`handoff`）只记录状态**，没有接管 UI。
 11. **无前端仪表盘**，只有 API 与 Swagger UI。
 12. **检索是关键词匹配**，未使用向量检索或 embedding。
+13. **版本字段主要为标签**，仅修改 `prompt_version` 或 `agent_version` 不会自动切换提示词或 Agent 实现。
+14. **Redis 状态缓存尚未接入运行主链路**，目前具备缓存类、部署配置和健康探针。
+15. **CI 门禁使用 Fake LLM 与合成评测集**，只能阻断确定性流程回归，不能证明真实模型质量。
 
 ## 安全
 

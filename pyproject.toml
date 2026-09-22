@@ -9,7 +9,7 @@ description = "LLM Agent 执行过程的记录、回放、评测与质量门禁�
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "AgentTrace Author" }]
+authors = [{ name = "zy" }]
 keywords = ["llm", "agent", "observability", "evaluation", "langgraph", "tracing"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -33,6 +33,11 @@ dependencies = [
     "python-ulid>=2.7,<3",
 ]
 
+[project.urls]
+Repository = "https://github.com/zhang2y17/AgentTrace"
+Documentation = "https://github.com/zhang2y17/AgentTrace/tree/main/docs"
+Issues = "https://github.com/zhang2y17/AgentTrace/issues"
+
 [project.optional-dependencies]
 # 开发与测试依赖。默认测试路径不需要任何 API Key 与网络。
 dev = [
@@ -41,9 +46,6 @@ dev = [
     "fakeredis>=2.23,<3",
     "ruff>=0.6,<1",
 ]
-
-[project.urls]
-Repository = "https://github.com/example/agenttrace"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

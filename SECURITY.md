@@ -143,7 +143,10 @@ AgentTrace 是一个**个人独立开发项目**，用于记录、回放、评�
 
 ## 5. 报告安全问题
 
-这是一个个人项目，没有安全响应团队。若你发现问题，请开一个 GitHub Issue。
+这是一个个人项目，没有安全响应团队。若仓库已启用 GitHub Private
+Vulnerability Reporting，请在仓库的 **Security → Advisories → Report a
+vulnerability** 中私密报告。若该入口不可用，可以开一个不包含漏洞细节的
+GitHub Issue，请维护者建立私密沟通渠道后再提供复现信息。
 
 请在报告中**不要**包含真实密钥、真实用户数据或生产环境信息。
 用自造的假数据复现即可。

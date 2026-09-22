@@ -46,7 +46,7 @@
 ## 开发环境
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/zhang2y17/AgentTrace.git agenttrace
 cd agenttrace
 
 python -m venv .venv

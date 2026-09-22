@@ -1,0 +1,58 @@
+flowchart TB
+    C["调用方：HTTP / Swagger UI"] --> API["FastAPI 路由与 Pydantic 契约<br/>app/api · app/schemas"]
+    CLI["评测命令行<br/>scripts/run_eval.py"] --> ES
+
+    subgraph S["应用服务层 · app/services"]
+        RS["RunService<br/>执行 / 查询 / 重新运行"]
+        ES["EvaluationService<br/>评测批次 / 查询 / 门禁"]
+        MS["metrics_service<br/>运行指标汇总"]
+    end
+    API --> RS
+    API --> ES
+    API --> MS
+    ES --> ER["EvaluationRunner<br/>逐 case 执行与断言"]
+    DS["JSONL 评测集<br/>data/eval"] --> ER
+    ER --> RS
+    ER --> EM["评测指标聚合<br/>12 个输出指标"]
+    ES --> GT["质量门禁<br/>阈值与观测值比较"]
+    EM -.-> GT
+
+    subgraph G["LangGraph · 五节点文档研究 Agent"]
+        Q["question_parser<br/>问题解析"] --> D["document_search<br/>关键词检索与取文档"]
+        D --> E["evidence_checker<br/>证据检查"]
+        E --> W["answer_writer<br/>生成带引用的答案"]
+        W --> V["final_validator<br/>答案与引用校验"]
+        E -. "证据不足且有重试额度" .-> D
+    end
+    RS --> Q
+    Q --> LLM["LLM Provider<br/>fake / OpenAI-compatible / Ollama"]
+    W --> LLM
+    D --> TR["工具注册表<br/>参数校验 / 计时 / 重试"]
+    TR --> DT["search_documents / get_document"]
+    DT --> DOC["6 篇合成样例文档<br/>data/sample_docs"]
+    TR -. "已注册，当前图未调用" .-> AT["calculate_latency_summary<br/>calculate_cost_summary"]
+
+    G -. "节点 / 模型 / 工具事件" .-> REC["TraceRecorder<br/>父子事件 / 摘要脱敏"]
+    REC --> REP["Repository"]
+    RS --> REP
+    MS --> REP
+    REP --> ORM["SQLAlchemy 模型与 Session"]
+    ER --> ORM
+    ES --> ORM
+    ORM --> DB[("PostgreSQL 16<br/>测试可用 SQLite<br/>8 张业务表")]
+
+    API --> HP["基础设施健康探针"]
+    HP --> DB
+    HP --> CACHE["TaskStateCache / Redis 探活"]
+    CACHE --> RD[("Redis 7<br/>可选短期状态基础能力")]
+    NOTE["当前 RunService 未接入状态缓存写入<br/>Redis 不缓存最终答案"] -.-> CACHE
+    CORE["横切能力：环境配置 / ID / JSON 日志 / 脱敏 / 错误映射"] -.-> S
+
+    classDef service fill:#eaf2ff,stroke:#4878bd,color:#172c4c;
+    classDef agent fill:#eaf8f0,stroke:#3c9266,color:#163d29;
+    classDef data fill:#fff4dc,stroke:#b48a30,color:#513c12;
+    classDef note fill:#f5f5f5,stroke:#999,color:#444;
+    class RS,ES,MS,API service;
+    class Q,D,E,W,V agent;
+    class DB,RD,DOC,DS data;
+    class NOTE,CORE note;

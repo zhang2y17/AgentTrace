@@ -103,6 +103,28 @@ jobs:
       - name: 校验代码与 docs/contract.lock.json 一致
         run: python scripts/verify_contract.py
 
+  quality-gate:
+    name: Offline evaluation quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install locked dependencies
+        run: pip install -r requirements.lock
+
+      - name: Run deterministic offline evaluation and enforce gate
+        run: >-
+          python scripts/run_eval.py
+          --dataset doc_research_v1
+          --gate
+          --sqlite sqlite+pysqlite:///./ci_gate.db
+
   secret-scan:
     name: 密钥与敏感信息扫描
     runs-on: ubuntu-latest

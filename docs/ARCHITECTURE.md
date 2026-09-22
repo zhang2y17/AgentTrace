@@ -2,93 +2,67 @@
 
 ## 1. 架构总览
 
+总览按当前实现整理，图源见 [system_architecture.mmd](diagrams/system_architecture.mmd)。实线表示主要调用或数据访问关系，虚线表示条件分支、事件记录或补充说明。Redis 基础能力已实现，但当前运行服务未写入状态缓存。评测模块部分直接使用 SQLAlchemy Session，并非全部经由 Repository。
+
 ```mermaid
 flowchart TB
-    subgraph Client["调用方"]
-        CLI["curl / HTTP 客户端"]
-        EVALCLI["scripts/run_eval.py"]
-    end
+    C["调用方：HTTP / Swagger UI"] --> API["FastAPI 路由与 Pydantic 契约<br/>app/api · app/schemas"]
+    CLI["评测命令行<br/>scripts/run_eval.py"] --> ES
 
-    subgraph API["FastAPI 应用 (app/)"]
-        R1["GET /health"]
-        R2["POST /runs"]
-        R3["GET /runs/{id}"]
-        R4["GET /runs/{id}/events"]
-        R5["POST /runs/{id}/replay"]
-        R6["POST /evaluations"]
-        R7["GET /evaluations/{id}"]
-        R8["GET /metrics/summary"]
-        R9["POST /quality-gates/check"]
+    subgraph S["应用服务层 · app/services"]
+        RS["RunService<br/>执行 / 查询 / 重新运行"]
+        ES["EvaluationService<br/>评测批次 / 查询 / 门禁"]
+        MS["metrics_service<br/>运行指标汇总"]
     end
+    API --> RS
+    API --> ES
+    API --> MS
+    ES --> ER["EvaluationRunner<br/>逐 case 执行与断言"]
+    DS["JSONL 评测集<br/>data/eval"] --> ER
+    ER --> RS
+    ER --> EM["评测指标聚合<br/>12 个输出指标"]
+    ES --> GT["质量门禁<br/>阈值与观测值比较"]
+    EM -.-> GT
 
-    subgraph Core["核心层"]
-        CFG["core/config.py<br/>env 配置"]
-        LOG["core/logging.py<br/>JSON 日志 + 脱敏"]
-        ERR["core/errors.py<br/>统一错误响应"]
-        IDS["core/ids.py<br/>run_id / event_id"]
-        RED["core/redaction.py<br/>输入输出摘要与脱敏"]
+    subgraph G["LangGraph · 五节点文档研究 Agent"]
+        Q["question_parser<br/>问题解析"] --> D["document_search<br/>关键词检索与取文档"]
+        D --> E["evidence_checker<br/>证据检查"]
+        E --> W["answer_writer<br/>生成带引用的答案"]
+        W --> V["final_validator<br/>答案与引用校验"]
+        E -. "证据不足且有重试额度" .-> D
     end
+    RS --> Q
+    Q --> LLM["LLM Provider<br/>fake / OpenAI-compatible / Ollama"]
+    W --> LLM
+    D --> TR["工具注册表<br/>参数校验 / 计时 / 重试"]
+    TR --> DT["search_documents / get_document"]
+    DT --> DOC["6 篇合成样例文档<br/>data/sample_docs"]
+    TR -. "已注册，当前图未调用" .-> AT["calculate_latency_summary<br/>calculate_cost_summary"]
 
-    subgraph Agent["Agent 层 (app/agent/)"]
-        GRAPH["graph.py<br/>LangGraph StateGraph"]
-        N1["question_parser"]
-        N2["document_search"]
-        N3["evidence_checker"]
-        N4["answer_writer"]
-        N5["final_validator"]
-        MW["middleware.py<br/>Trace 中间件"]
-        LLMGW["llm.py<br/>LLM 网关"]
-    end
+    G -. "节点 / 模型 / 工具事件" .-> REC["TraceRecorder<br/>父子事件 / 摘要脱敏"]
+    REC --> REP["Repository"]
+    RS --> REP
+    MS --> REP
+    REP --> ORM["SQLAlchemy 模型与 Session"]
+    ER --> ORM
+    ES --> ORM
+    ORM --> DB[("PostgreSQL 16<br/>测试可用 SQLite<br/>8 张业务表")]
 
-    subgraph Tools["工具层 (app/tools/)"]
-        REG["registry.py<br/>统一注册表"]
-        TS["search_documents"]
-        TG["get_document"]
-        TL["calculate_latency_summary"]
-        TC["calculate_cost_summary"]
-    end
+    API --> HP["基础设施健康探针"]
+    HP --> DB
+    HP --> CACHE["TaskStateCache / Redis 探活"]
+    CACHE --> RD[("Redis 7<br/>可选短期状态基础能力")]
+    NOTE["当前 RunService 未接入状态缓存写入<br/>Redis 不缓存最终答案"] -.-> CACHE
+    CORE["横切能力：环境配置 / ID / JSON 日志 / 脱敏 / 错误映射"] -.-> S
 
-    subgraph Eval["评测层 (app/evaluation/)"]
-        LOADER["dataset.py<br/>JSONL 加载"]
-        RUNNER["runner.py<br/>评测执行"]
-        METRICS["metrics.py<br/>指标计算"]
-        GATE["gate.py<br/>质量门禁"]
-    end
-
-    subgraph Data["数据层 (app/db/)"]
-        MODELS["models.py<br/>SQLAlchemy 2.x"]
-        SESS["session.py<br/>引擎与 Session"]
-        REPO["repository.py<br/>读写仓储"]
-    end
-
-    subgraph Infra["基础设施"]
-        PG[("PostgreSQL 16")]
-        RD[("Redis 7")]
-    end
-
-    CLI --> API
-    EVALCLI --> Eval
-    API --> Core
-    API --> Agent
-    API --> Eval
-    R2 --> GRAPH
-    R5 --> GRAPH
-    GRAPH --> N1 --> N2 --> N3 --> N4 --> N5
-    N2 --> REG
-    REG --> TS & TG & TL & TC
-    N1 --> LLMGW
-    N4 --> LLMGW
-    GRAPH --> MW
-    MW --> REPO
-    N3 --> MW
-    N5 --> MW
-    REPO --> MODELS
-    MODELS --> SESS
-    SESS --> PG
-    Agent -.短期任务状态.-> RD
-    Eval --> REPO
-    GATE --> METRICS
-    METRICS --> REPO
+    classDef service fill:#eaf2ff,stroke:#4878bd,color:#172c4c;
+    classDef agent fill:#eaf8f0,stroke:#3c9266,color:#163d29;
+    classDef data fill:#fff4dc,stroke:#b48a30,color:#513c12;
+    classDef note fill:#f5f5f5,stroke:#999,color:#444;
+    class RS,ES,MS,API service;
+    class Q,D,E,W,V agent;
+    class DB,RD,DOC,DS data;
+    class NOTE,CORE note;
 ```
 
 ## 2. 模块划分
@@ -111,11 +85,11 @@ app/
 │   └── redaction.py           # 摘要截断与密钥脱敏
 ├── schemas/                   # Pydantic 契约（API 输入输出、工具参数、评测结果）
 │   ├── common.py              # 分页、错误体、状态枚举
-│   ├── runs.py
-│   ├── events.py
+│   ├── runs.py                # 运行与事件契约
+│   ├── health.py
+│   ├── metrics.py
 │   ├── tools.py               # 4 个工具的参数与返回模型
-│   ├── eval.py
-│   ├── gate.py
+│   ├── eval.py                # 评测与门禁契约
 │   └── agents.py
 ├── db/                        # 持久化
 │   ├── base.py                # DeclarativeBase
@@ -140,7 +114,8 @@ app/
 │   └── analytics.py           # calculate_latency_summary, calculate_cost_summary
 ├── services/                  # 应用服务（跨层编排）
 │   ├── run_service.py         # 创建运行、执行、回放
-│   ├── cache.py               # Redis 短期任务状态（不缓存最终答案）
+│   ├── evaluation_service.py  # 评测编排、结果重读与门禁
+│   ├── cache.py               # Redis 状态基础类；尚未接入 RunService
 │   └── metrics_service.py     # 运行级指标汇总
 └── evaluation/                # 离线评测
     ├── dataset.py             # JSONL 加载与校验
@@ -167,7 +142,7 @@ sequenceDiagram
     participant A as POST /runs
     participant RS as RunService
     participant G as LangGraph
-    participant MW as TraceMiddleware
+    participant MW as TraceRecorder
     participant T as ToolRegistry
     participant R as Repository
     participant DB as PostgreSQL
@@ -177,10 +152,11 @@ sequenceDiagram
     A->>RS: execute(question, config)
     RS->>R: create_run(status="running") -> run_id
     R->>DB: INSERT run
-    RS->>G: ainvoke(initial_state)
-    loop 5 个节点
+    RS->>G: graph.invoke(initial_state)（线程池内同步调用）
+    loop 节点执行（检索与证据检查可能重复）
         G->>MW: node_enter(node_name, input_summary)
         MW->>R: INSERT trace_event(node)
+        opt document_search 节点调用工具
         G->>T: invoke(tool_name, raw_args)
         T->>T: Pydantic 校验参数
         alt 参数合法
@@ -191,6 +167,7 @@ sequenceDiagram
             T-->>G: ToolResult(error)
         end
         MW->>R: INSERT trace_event(tool_call)
+        end
         G->>MW: node_exit(status, output_summary)
         MW->>R: UPDATE trace_event SET ended_at, duration_ms
     end
@@ -203,13 +180,13 @@ sequenceDiagram
 
 ## 4. Trace 写入路径
 
-Trace 写入有两条路径，职责分离：
+Trace 按触发来源记录，职责如下：
 
 | 路径 | 触发者 | 写入内容 |
 |---|---|---|
-| 节点级 | `TraceMiddleware.node_scope()` | 一条 `trace_event`（`event_type=node`），开闭两次写（INSERT + UPDATE 补 `ended_at`/`duration_ms`） |
-| 工具级 | `ToolRegistry.invoke()` | 一条 `tool_call` + 一条 `trace_event`（`event_type=tool_call`），后者的 `event_id` 作为 `parent_event_id` 挂在节点事件下 |
-| 模型级 | `LLMGateway.complete()` | 一条 `model_call` + 一条 `trace_event`（`event_type=model_call`） |
+| 节点级 | `TraceRecorder.node()`（由图包装器调用） | 一条 `trace_event`（`event_type=node`），开闭两次写（INSERT + UPDATE 补 `ended_at`/`duration_ms`） |
+| 工具级 | `ToolRegistry.invoke()` | 一条 `tool_call` + 一条 `trace_event`（`event_type=tool_call`），工具事件的 `parent_event_id` 指向所属节点事件 |
+| 模型级 | 节点调用 provider 后执行 `TraceRecorder.record_model_call()` | 一条 `model_call` + 一条 `trace_event`（`event_type=model_call`） |
 | 错误级 | `core/errors.py` 的捕获点 | 一条 `trace_event`（`event_type=error`），带 `error_code` |
 | 终结 | `RunService._finalize()` | 一条 `trace_event`（`event_type=final_result`） |
 
@@ -286,4 +263,4 @@ flowchart LR
 | 同步 vs 异步 DB | 使用**同步** SQLAlchemy Session，FastAPI 端点用 `def`（线程池执行） | Trace 写入是短事务、追加型；同步栈可读性高、调试容易，且避免 async session 与 LangGraph 事件循环的混用问题 |
 | 事件批量写 | 逐条 INSERT | 需要每条事件即时可查（失败定位要求）；批量写会牺牲可观测性 |
 | 评测并发 | 串行执行 case | 默认 `LLM_PROVIDER=fake` 时耗时主要在本地，串行更易复现；真实模型模式可后续加并发上限 |
-| Redis 用途 | 仅任务状态 | 契约明确禁止缓存最终答案，避免"读到旧答案"污染评测 |
+| Redis 用途 | 提供短期状态基础类，运行主链路尚未接入 | 契约明确禁止缓存最终答案，避免"读到旧答案"污染评测 |
