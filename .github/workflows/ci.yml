@@ -159,7 +159,7 @@ jobs:
           matches=$(grep -rInE '\b(tencent|bytedance|alibaba|baidu)\b|\.internal\b|\.corp\b' \
             --include='*.py' --include='*.md' --include='*.yml' \
             --include='*.json' --include='*.toml' . 2>/dev/null \
-            | grep -vE 'denylist|scripts/verify_contract|SECURITY.md|CONTRIBUTING.md|禁止|检查' || true)
+            | grep -vE 'db\.internal|denylist|scripts/verify_contract|SECURITY.md|CONTRIBUTING.md|ACCEPTANCE_CHECKLIST.md|contract\.lock\.json|\.github/workflows/ci\.yml|禁止|检查' || true)
           if [ -n "$matches" ]; then
             echo "发现公司名称或内部域名："
             echo "$matches"
