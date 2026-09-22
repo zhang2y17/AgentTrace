@@ -14,6 +14,9 @@ __pycache__/
 .pt*/
 junit*.xml
 .j*.xml
+# 临时 junit 报告（本地跑测试时按需指定路径，文件名形如 .full.xml / .qg.xml）。
+# 这些是本地产物而非交付物，但很容易忘了删，因此统一挡住。
+.*.xml
 .venv/
 venv/
 *.db

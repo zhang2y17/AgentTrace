@@ -6,8 +6,62 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import BeforeValidator, PlainSerializer
+
+# 契约 API_CONTRACT §0.2 要求所有时间为 ISO 8601 UTC、带 ``Z`` 后缀、
+# **毫秒精度**（``2026-09-22T04:00:00.000Z``）。
+#
+# 直接声明 ``datetime`` 有两个坑，都会让响应偏离契约：
+#   1. ``datetime.isoformat()`` 在微秒为 0 时**省略小数部分**，
+#      产出 ``2026-09-22T04:00:00Z`` 而不是 ``...T04:00:00.000Z``；
+#      在微秒非 0 时又产出 6 位（``.100000``）。
+#   2. 从 SQLite 读回的时间是 naive 的（没有 tzinfo），序列化结果不带 ``Z``，
+#      而 PostgreSQL 读回的是 aware —— 同一份契约在两种方言下产出两种格式。
+#
+# 因此统一走这个别名：入库/构造时补 UTC 时区（naive 一律当 UTC），
+# 序列化时收敛到毫秒并带 ``Z``。所有时间字段都必须用它，
+# 不允许直接写 ``datetime``。
+_ISO_MILLISECONDS = 3
+
+
+def _coerce_utc(value: Any) -> Any:
+    """把时间输入补齐为带 UTC 时区的 ``datetime``。
+
+    契约只声明 UTC 时间，因此 naive 值一律**当作** UTC ——
+    而不是拒绝。库里读回的 naive 值是 SQLite 的正常行为，
+    拒绝会让整个 API 在 SQLite 下不可用。
+    """
+    if isinstance(value, datetime) and value.tzinfo is None:
+
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+def _format_utc(value: datetime) -> str:
+    """按契约格式序列化：UTC、毫秒精度、``Z`` 后缀。"""
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    value = value.astimezone(UTC)
+
+    # ``isoformat(timespec="milliseconds")`` 恰好给出 ``...T04:00:00.000+00:00``，
+    # 把 ``+00:00`` 换成 ``Z`` 即为契约形状。
+    return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+UtcTimestamp = Annotated[
+    datetime,
+    BeforeValidator(_coerce_utc),
+    PlainSerializer(_format_utc, return_type=str, when_used="json"),
+]
+"""契约 API_CONTRACT §0.2 的 UTC 毫秒时间戳。
+
+用法：``started_at: UtcTimestamp`` —— 不要写 ``datetime``。
+"""
 
 
 class RunStatus(StrEnum):
@@ -177,4 +231,5 @@ __all__ = [
     "ModelCallStatus",
     "RunStatus",
     "ToolCallStatus",
+    "UtcTimestamp",
 ]

@@ -18,7 +18,7 @@ FastAPI 原则上可以自己实例化它们。但仍然以显式函数暴露，
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
@@ -49,13 +49,33 @@ def get_metrics_service() -> MetricsService:
     return MetricsService()
 
 
+def get_evaluation_service() -> Any:
+    """构造评测服务。
+
+    **刻意不在模块顶层 import ``EvaluationService``**：
+    它会连带加载 ``app.evaluation.runner`` → ``app.tools.bootstrap``
+    → 文档存储与检索实现。评测是一组低频端点，
+    而 /health 与 /runs 是高频端点 —— 让后者的模块导入
+    依赖前者的整条链路没有必要。
+
+    返回类型标注为 ``Any`` 也是这个原因：真正的类型在函数体内
+    才被导入，顶层写不出来。
+    """
+    from app.services.evaluation_service import EvaluationService
+
+    return EvaluationService()
+
+
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
+EvaluationServiceDep = Annotated[Any, Depends(get_evaluation_service)]
 
 __all__ = [
+    "EvaluationServiceDep",
     "MetricsServiceDep",
     "RunServiceDep",
     "SettingsDep",
+    "get_evaluation_service",
     "get_metrics_service",
     "get_run_service",
 ]

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.common import DataScope, EvalRunStatus, GateStatus
+from app.schemas.common import DataScope, EvalRunStatus, GateStatus, UtcTimestamp
 from app.schemas.metrics import MetricsBlock
 
 ThresholdOperator = Literal["min", "max"]
@@ -132,13 +131,21 @@ class EvaluationResponse(BaseModel):
     case_count: int = Field(ge=0)
     passed_cases: int = Field(ge=0)
     failed_cases: int = Field(ge=0)
+    run_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "本批次每个 case 对应的 run_id，顺序与 case 执行顺序一致。"
+            "契约 API_CONTRACT §6 要求返回它：没有它，评测结论无法回溯到"
+            "具体的运行记录，'成功率 0.83' 就只是一个无法复核的数字。"
+        ),
+    )
     metrics: MetricsBlock
     skipped_metrics: list[str] = Field(
         default_factory=list,
         description="因无数据而未参与判定的指标（EVALUATION §6.3：跳过 ≠ 通过）",
     )
-    started_at: datetime
-    ended_at: datetime | None = None
+    started_at: UtcTimestamp
+    ended_at: UtcTimestamp | None = None
     duration_ms: int | None = Field(default=None, ge=0)
     cases: list[EvaluationCaseResult] | None = Field(
         default=None, description="仅当 include_cases=true 时返回"
@@ -196,7 +203,7 @@ class QualityGateResponse(BaseModel):
         default_factory=list,
         description="无数据而跳过的指标；**不得**在文档中把跳过说成通过",
     )
-    checked_at: datetime
+    checked_at: UtcTimestamp
     data_source_note: str = (
         "阈值判定基于离线评测结果，通过门禁仅表示满足本项目定义的离线质量基线，不等于可生产发布。"
     )

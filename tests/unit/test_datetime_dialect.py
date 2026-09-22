@@ -21,6 +21,9 @@ import pytest
 
 from app.db.base import elapsed_ms, ensure_aware, utcnow
 
+# 别名：下面的注解检查需要按对象身份比较 datetime 类型
+_datetime = datetime
+
 
 class TestEnsureAware:
     """``ensure_aware`` 的归一化语义。"""
@@ -211,3 +214,169 @@ def test_close_event_various_durations(repository: Any, naive_offset_ms: int) ->
     events, _total = repository.list_events(run.id)
     closed = next(e for e in events if e.event_id == event.event_id)
     assert closed.duration_ms == naive_offset_ms
+
+
+class TestUtcTimestampSerialization:
+    """契约 API_CONTRACT §0.2 的序列化格式：UTC、毫秒、``Z`` 后缀。
+
+    这是"跨方言时间戳"问题的**出口端**：``ensure_aware`` 保证入库前
+    时间带时区，``UtcTimestamp`` 保证出参时格式符合契约。两者缺一，
+    同一个时间字段在 SQLite 与 PostgreSQL 下就会产出两种形状。
+
+    契约示例是 ``2026-09-22T04:00:00.000Z`` —— 注意小数部分**始终存在**，
+    哪怕微秒为 0。直接声明 ``datetime`` 会把它省略成 ``...T04:00:00Z``，
+    客户端按定长解析时两者长度不同。
+    """
+
+    def test_zero_microseconds_still_emits_milliseconds(self) -> None:
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp
+
+        value = datetime(2026, 9, 22, 4, 0, 0, tzinfo=UTC)
+        assert _Model(t=value).model_dump_json() == '{"t":"2026-09-22T04:00:00.000Z"}'
+
+    def test_nonzero_microseconds_are_truncated_to_milliseconds(self) -> None:
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp
+
+        value = datetime(2026, 9, 22, 4, 0, 0, 412000, tzinfo=UTC)
+        assert _Model(t=value).model_dump_json() == '{"t":"2026-09-22T04:00:00.412Z"}'
+
+    def test_naive_value_is_treated_as_utc(self) -> None:
+        """SQLite 读回的时间是 naive 的。把它当 UTC 而不是拒绝 ——
+        拒绝会让整个 API 在 SQLite 下不可用。
+        """
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp
+
+        assert (
+            _Model(t=datetime(2026, 9, 22, 4, 0, 0)).model_dump_json()
+            == '{"t":"2026-09-22T04:00:00.000Z"}'
+        )
+
+    def test_non_utc_offset_is_converted(self) -> None:
+        """带 +08:00 偏移的时间必须换算到 UTC —— 契约只声明 UTC。"""
+        from datetime import timedelta, timezone
+
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp
+
+        value = datetime(2026, 9, 22, 12, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+        assert _Model(t=value).model_dump_json() == '{"t":"2026-09-22T04:00:00.000Z"}'
+
+    def test_optional_none_is_preserved(self) -> None:
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp | None = None
+
+        assert _Model().model_dump_json() == '{"t":null}'
+
+    def test_all_response_timestamp_fields_use_the_alias(self) -> None:
+        """防止有人日后新加一个时间字段时直接写 ``datetime``。
+
+        直接声明 ``datetime`` 不会报错，只会静默产出不符契约的格式 ——
+        正是那种"测试全绿但客户端解析失败"的问题。
+
+        检查方式是看字段的**元数据**里有没有 ``PlainSerializer``，
+        而不是去匹配类型字符串：``Annotated[datetime, ...]`` 的 repr
+        本身就含 ``datetime`` 子串，按字符串匹配会把已正确标注的字段
+        误判成"裸 datetime"，让这条测试永远无法通过。
+        """
+        from typing import get_args
+
+        from pydantic import PlainSerializer
+
+        from app.schemas.eval import EvaluationResponse, QualityGateResponse
+        from app.schemas.health import HealthResponse
+        from app.schemas.runs import RunDetail, TraceEventOut
+
+        def _has_plain_serializer(annotation: object, metadata: object) -> bool:
+            """判断字段是否挂了 ``PlainSerializer``。
+
+            Pydantic 对这两种声明的处理不同，必须都覆盖：
+
+            - ``t: UtcTimestamp`` → 元数据被**上提**到 ``field.metadata``，
+              此时 ``field.annotation`` 是裸的 ``datetime``；
+            - ``t: UtcTimestamp | None`` → 元数据**留在** ``Annotated`` 里，
+              而 ``field.metadata`` 是空的。
+
+            只看其中一个会让另一类字段被误判为"用了裸 datetime"。
+            """
+            if any(isinstance(item, PlainSerializer) for item in (metadata or ())):
+                return True
+            for item in getattr(annotation, "__metadata__", ()) or ():
+                if isinstance(item, PlainSerializer):
+                    return True
+            # Optional[...] / Annotated 嵌套
+            return any(
+                _has_plain_serializer(arg, None) for arg in get_args(annotation)
+            )
+
+        def _is_annotated_datetime(annotation: object) -> bool:
+            """递归判断注解里是否出现 ``datetime`` 类型。"""
+            if annotation is _datetime:
+                return True
+            return any(_is_annotated_datetime(arg) for arg in get_args(annotation))
+
+        offenders: list[str] = []
+        checked = 0
+        for model in (
+            RunDetail,
+            TraceEventOut,
+            HealthResponse,
+            EvaluationResponse,
+            QualityGateResponse,
+        ):
+            for name, field in model.model_fields.items():
+                annotation = field.annotation
+                if not _is_annotated_datetime(annotation):
+                    continue
+                checked += 1
+                if not _has_plain_serializer(annotation, field.metadata):
+                    offenders.append(f"{model.__name__}.{name}: {annotation}")
+
+        # 收集型断言最危险的失效方式是"收集范围为零"：
+        # 模型改名之后它照样绿，但什么都没检查。
+        assert checked >= 5, f"只匹配到 {checked} 个时间字段，检查范围可能已失效"
+        assert offenders == [], (
+            f"以下时间字段未使用 UtcTimestamp（缺 PlainSerializer）：{offenders}"
+        )
+
+    def test_at_least_one_field_was_actually_checked(self) -> None:
+        """防止上面的检查因为"一个字段都没匹配到"而空过。
+
+        这条"零收集"守卫已经内联在上面的 ``checked`` 断言里，
+        这里额外用真实的序列化结果确认别名确实在生效 ——
+        只看元数据仍可能漏掉"元数据在、但序列化器被覆盖"的情况。
+        """
+        from pydantic import BaseModel
+
+        from app.schemas.common import UtcTimestamp
+
+        class _Model(BaseModel):
+            t: UtcTimestamp | None = None
+
+        # 走真实的 model_dump_json，确认格式而不只是确认装饰器存在。
+        assert (
+            _Model(t=datetime(2026, 9, 22, 4, 0, 0, tzinfo=UTC)).model_dump_json()
+            == '{"t":"2026-09-22T04:00:00.000Z"}'
+        )

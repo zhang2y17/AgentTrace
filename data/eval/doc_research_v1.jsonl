@@ -1,0 +1,36 @@
+# doc_research_v1 —— AgentTrace 合成评测集（14 个 case）
+#
+# 真实性声明（EVALUATION §1.3）：
+# 本文件中的问题由**本项目作者针对本仓库自建的 6 篇样例文档**编写，
+# 属于合成评测集。不来自任何真实用户日志，不含任何公司业务数据。
+# 规模小是刻意的：目的是让每个 case 都能被人工核对。
+#
+# 关于断言的选择原则（重要）
+#
+# 默认运行使用 LLM_PROVIDER=fake，测试替身的答案是
+# "见文档 [doc-xxx] 的相关说明" 形式的占位拼接，**不含文档正文**。
+# 因此：
+#   - 结构类断言（contains_citation / has_evidence_section /
+#     no_hallucinated_doc / min_citations>=N）在替身模式下有意义；
+#   - 内容类断言（mentions_<keyword>）在替身模式下**必然失败** ——
+#     替身不会复述文档内容。把它写进必过断言会让评测恒定不达标，
+#     从而把"替身能力受限"误读成"Agent 质量差"。
+#
+# 因此本评测集只用结构类断言 + 覆盖率断言。评测"答案内容是否正确"
+# 需要真实模型（ENABLE_REAL_LLM_TESTS=true），那时再按需补充
+# mentions_* 断言 —— 这是一条明确的、可验证的边界，不是省略。
+#
+{"case_key": "doc-001", "question": "AgentTrace 的 trace_event 表里 parent_event_id 的作用是什么？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section", "no_hallucinated_doc"], "required_citations": 1, "expect_success": true, "tags": ["trace", "schema"]}
+{"case_key": "doc-002", "question": "为什么 trace_event 需要 sequence 字段，而不是只用 started_at 排序？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["trace", "sequence"]}
+{"case_key": "doc-003", "question": "示例 Agent 有哪五个节点？它们的顺序是否可变？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["agent", "nodes"]}
+{"case_key": "doc-004", "question": "工具调用为什么必须同时写入 tool_call 宽表和 trace_event 事件流？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["tools", "trace"]}
+{"case_key": "doc-005", "question": "AgentTrace 为什么用 ULID 而不是 UUID4 作为主键？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["design", "ids"]}
+{"case_key": "doc-006", "question": "评测指标里的 degraded 状态算成功吗？它会进入错误率吗？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["evaluation", "metrics"]}
+{"case_key": "doc-007", "question": "为什么分位数要用 nearest-rank 而不是线性插值？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["evaluation", "latency"]}
+{"case_key": "doc-008", "question": "工具的参数校验为什么必须走 Pydantic，而不是在工具内部手工判断？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["tools", "validation"]}
+{"case_key": "doc-009", "question": "为什么金额字段用 Numeric 而不是 Float？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["design", "money"]}
+{"case_key": "doc-010", "question": "质量门禁的阈值快照为什么要持久化到数据库？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["evaluation", "gate"]}
+{"case_key": "doc-011", "question": "Trace 事件模型要求每个事件都有哪些必需字段？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 3}}, "required_assertions": ["contains_citation", "has_evidence_section"], "required_citations": 1, "expect_success": true, "tags": ["trace", "schema"]}
+{"case_key": "doc-012", "question": "Trace 事件的八个状态分别是什么？", "expected_tools": ["search_documents", "get_document"], "expected_arguments": {"search_documents": {"top_k": 5}}, "required_assertions": ["contains_citation", "min_citations>=2"], "required_citations": 2, "expect_success": true, "tags": ["trace", "status", "argument-mismatch"]}
+{"case_key": "doc-013", "question": "样本评测集与测试替身的边界在哪里？用替身跑出的数值能说明模型能力吗？", "expected_tools": ["search_documents", "get_document"], "required_assertions": ["contains_citation", "no_hallucinated_doc"], "required_citations": 1, "expect_success": true, "tags": ["evaluation", "test-double"]}
+{"case_key": "doc-014", "question": "请从样例文档里查出 AgentTrace 在 GitHub 上的 star 数量和已付费企业客户名单。", "expected_tools": ["search_documents", "get_document"], "required_assertions": ["no_hallucinated_doc"], "required_citations": 0, "expect_success": true, "tags": ["negative", "anti-hallucination"]}

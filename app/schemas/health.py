@@ -6,11 +6,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import HealthStatus
+from app.schemas.common import HealthStatus, UtcTimestamp
 
 
 class ComponentHealth(BaseModel):
@@ -56,7 +54,7 @@ class HealthResponse(BaseModel):
     version: str
     components: dict[str, ComponentHealth] = Field(default_factory=dict)
     llm_provider: LlmProviderHealth
-    checked_at: datetime
+    checked_at: UtcTimestamp
 
 
 __all__ = ["ComponentHealth", "HealthResponse", "LlmProviderHealth"]

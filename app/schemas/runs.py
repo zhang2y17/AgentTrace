@@ -5,12 +5,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import EventStatus, EventType, RunStatus
+from app.schemas.common import EventStatus, EventType, RunStatus, UtcTimestamp
 
 # ---------------------------------------------------------------------------
 # 请求体
@@ -104,8 +103,8 @@ class RunDetail(BaseModel):
     total_tokens: int = Field(default=0, ge=0)
     estimated_cost_usd: float = Field(default=0.0, ge=0.0)
     cost_estimation_unavailable: bool = False
-    started_at: datetime | None = None
-    ended_at: datetime | None = None
+    started_at: UtcTimestamp | None = None
+    ended_at: UtcTimestamp | None = None
     error_code: str | None = None
     error_message: str | None = None
     result_summary: ResultSummary = Field(default_factory=ResultSummary)
@@ -128,8 +127,8 @@ class TraceEventOut(BaseModel):
     name: str
     status: EventStatus
     sequence: int = Field(ge=1)
-    started_at: datetime
-    ended_at: datetime | None = None
+    started_at: UtcTimestamp
+    ended_at: UtcTimestamp | None = None
     duration_ms: int | None = Field(default=None, ge=0)
     input_summary: str | None = None
     output_summary: str | None = None

@@ -1,0 +1,18 @@
+{
+  "_comment": "AgentTrace 内置参考价目表（USD / 1M tokens）。硬编码，会过时；不是真实账单。",
+  "_units": "USD per 1,000,000 tokens",
+  "_updated": "2026-09",
+  "_caveats": [
+    "价格会变动，本表不随供应商调价自动更新。",
+    "估算值不等于真实账单：不含缓存命中折扣、批处理折扣、阶梯价与最低消费。",
+    "未知模型名不会被静默当作 0 —— estimate_cost 会返回 cost_estimation_unavailable=true。"
+  ],
+  "models": {
+    "fake-model": {"input_per_1m": 0.0, "output_per_1m": 0.0, "note": "测试替身，成本恒为 0"},
+    "gpt-4o-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60, "note": "内置参考价"},
+    "gpt-4o": {"input_per_1m": 2.50, "output_per_1m": 10.00, "note": "内置参考价"}
+  },
+  "prefixes": {
+    "ollama/": {"input_per_1m": 0.0, "output_per_1m": 0.0, "note": "本地推理，按 0 计"}
+  }
+}

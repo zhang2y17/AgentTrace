@@ -4,6 +4,6 @@
 只能通过 ``app.services`` 或 ``app.db.repository`` 访问数据。
 """
 
-from app.api import health, metrics, runs
+from app.api import evaluations, health, metrics, quality_gates, runs
 
-__all__ = ["health", "metrics", "runs"]
+__all__ = ["evaluations", "health", "metrics", "quality_gates", "runs"]

@@ -447,27 +447,28 @@ def _write_demo_trace(run_id: str, started_at: datetime) -> None:
 def seed_eval_cases(*, force: bool = False) -> tuple[int, str]:
     """从评测集 JSONL 载入 eval_case。
 
-    评测集加载属 S6 的职责（``app.evaluation.dataset``）。在本脚本被执行时
-    该模块可能尚不存在，因此这里**探测式调用**：
-    - 模块不存在 → 跳过并提示"待 S6 实现"，返回 0，**不视为失败**；
-    - 数据集文件不存在 → 同样跳过并提示。
+    评测集加载与解析复用 ``app.evaluation.dataset``（S6 的实现），
+    **不再自己解析 JSONL** —— 两份解析逻辑迟早会分叉，
+    而分叉时"播种进去的 case"与"评测时读到的 case"会悄悄变成两批数据。
 
-    这样 ``docker compose up`` 在任何阶段都不会因为播种脚本而失败。
+    Args:
+        force: 为 True 时先删掉同名 case 再重建。
+
+    Returns:
+        ``(写入条数, 说明文本)``。
     """
     try:
         from app.evaluation.dataset import load_dataset  # type: ignore[import-not-found]
     except ImportError:
-        return 0, "app.evaluation.dataset 尚未实现（S6 阶段），跳过"
+        return 0, "app.evaluation.dataset 尚未实现，跳过"
 
-    settings = get_settings()
     dataset_version = "doc_research_v1"
-    dataset_path = PROJECT_ROOT / settings.eval_dataset_dir / f"{dataset_version}.jsonl"
-
-    if not dataset_path.exists():
-        return 0, f"评测集文件不存在：{dataset_path.relative_to(PROJECT_ROOT).as_posix()}，跳过"
 
     try:
-        cases = load_dataset(dataset_version)
+        # 路径解析交给 ``load_dataset``（它读 ``EVAL_DATASET_DIR`` 并挡路径穿越）。
+        # 这里不再自己拼路径 —— 本脚本曾经的那份拼接逻辑与
+        # ``dataset_path`` 是两套实现，其中一套改了就立刻分叉。
+        dataset = load_dataset(dataset_version)
     except Exception as exc:  # noqa: BLE001 —— 播种失败不应阻断服务启动
         return 0, f"加载评测集失败：{type(exc).__name__}: {exc}"
 
@@ -475,9 +476,11 @@ def seed_eval_cases(*, force: bool = False) -> tuple[int, str]:
 
     written = 0
     with session_scope() as session:
-        for case in cases:
-            payload = case.model_dump() if hasattr(case, "model_dump") else dict(case)
-            case_key = str(payload["case_key"])
+        # ``EvalDataset`` 实现了 ``__iter__``，因此 ``for case in dataset``
+        # 直接拿到 ``EvalCaseSpec``。这里**不**去碰 ``dataset.cases`` ——
+        # 少一处对内部字段名的依赖，重构时少一处会静默断掉的地方。
+        for case in dataset:
+            case_key = case.case_key
 
             stmt = select(EvalCase).where(EvalCase.case_key == case_key)
             existing = session.execute(stmt).scalar_one_or_none()
@@ -494,19 +497,19 @@ def seed_eval_cases(*, force: bool = False) -> tuple[int, str]:
                 EvalCase(
                     id=new_eval_case_id(),
                     case_key=case_key,
-                    dataset_version=str(payload.get("dataset_version", dataset_version)),
-                    question=str(payload["question"]),
-                    expected_tools=list(payload.get("expected_tools") or []),
-                    expected_arguments=payload.get("expected_arguments"),
-                    required_assertions=list(payload.get("required_assertions") or []),
-                    required_citations=int(payload.get("required_citations") or 0),
-                    expect_success=bool(payload.get("expect_success", True)),
-                    tags=list(payload.get("tags") or []),
+                    dataset_version=dataset_version,
+                    question=case.question,
+                    expected_tools=list(case.expected_tools),
+                    expected_arguments=case.expected_arguments,
+                    required_assertions=list(case.required_assertions),
+                    required_citations=case.required_citations,
+                    expect_success=case.expect_success,
+                    tags=list(case.tags),
                 )
             )
             written += 1
 
-    return written, f"已载入 {written} 个 case（共 {len(cases)} 个）"
+    return written, f"已载入 {written} 个 case（共 {len(dataset)} 个）"
 
 
 # ---------------------------------------------------------------------------
