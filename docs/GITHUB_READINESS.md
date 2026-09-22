@@ -24,7 +24,7 @@
 ## 首次公开前优先完成
 
 - [x] 已创建公开 GitHub 仓库，并在 `pyproject.toml`、README 和贡献指南中加入真实 URL。
-- [ ] 在 GitHub 仓库设置中启用 Private Vulnerability Reporting，使 `SECURITY.md` 描述的私密报告入口可用。
+- [x] 已启用 GitHub Private Vulnerability Reporting，`SECURITY.md` 描述的私密报告入口可用。
 - [x] 作者占位已按本地 Git 配置替换为 `zy`。
 - [x] README 与贡献指南不再包含虚构仓库 URL。
 - [x] 已在 [项目介绍的实现边界](PROJECT_OVERVIEW.md#当前实现边界) 中说明版本标签、Redis 基础类与 Fake LLM 门禁的范围。
