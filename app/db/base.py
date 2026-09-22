@@ -60,6 +60,47 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def ensure_aware(value: datetime) -> datetime:
+    """把可能丢失时区信息的 datetime 归一为 aware UTC。
+
+    **为什么必须有这个函数**：SQLAlchemy 的 ``TIMESTAMP(timezone=True)``
+    在 PostgreSQL 上会原样保留时区，但 **SQLite 根本没有时区类型** ——
+    写进去的 aware datetime 读出来是 naive 的。
+
+    于是"写入时 aware、读回时 naive"这个差异会在做时间差计算时炸掉::
+
+        finished - event.started_at
+        TypeError: can't subtract offset-naive and offset-aware datetimes
+
+    这个 bug 只在 SQLite 上暴露、在 PostgreSQL 上不暴露，
+    属于典型的"本地测试全绿、换方言就崩"的跨方言陷阱 ——
+    而且它命中的是**每一条事件的耗时计算**，影响面是全部 Trace。
+
+    处理策略：naive 值一律**假定为 UTC**（因为我们写入时就是 UTC），
+    然后补上 tzinfo。这不是猜测：写入路径唯一，语义是确定的。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def elapsed_ms(started_at: datetime, ended_at: datetime) -> int:
+    """计算两个时间点之间的毫秒差，跨方言安全。
+
+    Args:
+        started_at: 起始时间（naive 会被视为 UTC）。
+        ended_at: 结束时间（naive 会被视为 UTC）。
+
+    Returns:
+        毫秒数，负值被夹到 0。
+
+    负值夹到 0 而不是报错：时钟回拨（NTP 校正、容器迁移）会真实发生，
+    一个负的耗时会让下游的百分位统计失去意义。记录 0 是更诚实的降级。
+    """
+    delta = ensure_aware(ended_at) - ensure_aware(started_at)
+    return max(0, int(delta.total_seconds() * 1000))
+
+
 def id_column(*, primary_key: bool = False, foreign_key: str | None = None):  # type: ignore[no-untyped-def]
     """构造 ID 列。
 

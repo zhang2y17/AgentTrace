@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ipaddress
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -18,6 +19,10 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LlmProvider = Literal["fake", "openai", "ollama"]
+
+# 项目根目录：``app/core/config.py`` 往上三层。
+# 用它把"数据目录"类配置锚定为绝对路径 —— 见下方 _PROJECT_ROOT 的用法说明。
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -83,7 +88,8 @@ class Settings(BaseSettings):
     summary_max_chars: int = Field(default=500, ge=50, le=10000)
 
     # ---------------------------------------------------------------- 评测
-    eval_dataset_dir: str = "data/eval"
+    # 同样锚定为绝对路径，理由见下方"数据目录"一节。
+    eval_dataset_dir: str = str(_PROJECT_ROOT / "data" / "eval")
     # 默认门禁阈值，键名必须与 evaluation/metrics.py 导出的指标名一致
     gate_default_thresholds_json: str = Field(
         default=(
@@ -100,8 +106,17 @@ class Settings(BaseSettings):
     )
 
     # ---------------------------------------------------------------- 数据目录
-    sample_docs_dir: str = "data/sample_docs"
-    pricing_table_path: str = "app/evaluation/pricing.json"
+    # 默认值锚定到**项目根目录的绝对路径**，而不是相对路径。
+    #
+    # 为什么不能用相对路径：相对路径按进程的当前工作目录解析，
+    # 于是"能读到几个样例文档"取决于进程从哪里启动 ——
+    # 测试里 chdir 到临时目录后，同一个配置就会指向一个空目录，
+    # 表现为"检索结果为空 → 证据不足 → 全部降级"，
+    # 与真实缺陷难以区分。锚定绝对路径让行为与 CWD 无关。
+    #
+    # 仍可通过环境变量覆盖（例如容器里挂载到别的路径）。
+    sample_docs_dir: str = str(_PROJECT_ROOT / "data" / "sample_docs")
+    pricing_table_path: str = str(_PROJECT_ROOT / "app" / "evaluation" / "pricing.json")
 
     # ---------------------------------------------------------------- 测试开关
     # 真实 LLM 集成测试默认关闭。默认测试路径不访问网络。

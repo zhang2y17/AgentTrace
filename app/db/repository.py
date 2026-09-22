@@ -113,7 +113,7 @@ class TraceRepository:
 
         ``ended_at`` 与 ``total_duration_ms`` 同时写入，保证二者自洽。
         """
-        from app.db.base import utcnow
+        from app.db.base import elapsed_ms, utcnow
 
         run = self.get_run(run_id)
         if run is None:
@@ -125,8 +125,9 @@ class TraceRepository:
         run.status = status
         run.ended_at = finished
         if run.started_at is not None:
-            delta = finished - run.started_at
-            run.total_duration_ms = max(0, int(delta.total_seconds() * 1000))
+            # 同 close_event：SQLite 读回的时间戳是 naive，
+            # 直接相减会在 SQLite 上抛 TypeError。
+            run.total_duration_ms = elapsed_ms(run.started_at, finished)
 
         if result_summary is not None:
             # result_summary 是 JSON 字段，逐字符串值做脱敏截断
@@ -285,7 +286,7 @@ class TraceRepository:
 
         对应 TRACE_SCHEMA 的 "INSERT 时 status=running，UPDATE 时补 ended_at"。
         """
-        from app.db.base import utcnow
+        from app.db.base import elapsed_ms, utcnow
 
         event = self.session.get(TraceEvent, event_id)
         if event is None:
@@ -297,8 +298,9 @@ class TraceRepository:
         event.ended_at = finished
         event.status = status
         if event.started_at is not None:
-            delta = finished - event.started_at
-            event.duration_ms = max(0, int(delta.total_seconds() * 1000))
+            # 用 elapsed_ms 而不是直接相减：SQLite 读回的时间戳是 naive，
+            # 与 aware 的 finished 相减会抛 TypeError（跨方言陷阱）。
+            event.duration_ms = elapsed_ms(event.started_at, finished)
         if output_summary is not None:
             event.output_summary = summarize(output_summary, summary_max_chars)
         if error_code is not None:

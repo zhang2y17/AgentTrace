@@ -191,19 +191,29 @@ class ContractVerifier:
         expected = {tool["name"] for tool in self.lock["tools"]}
 
         try:
-            from app.tools.registry import get_registry  # type: ignore[import-not-found]
+            from app.tools.bootstrap import register_default_tools
+            from app.tools.registry import registered_names
 
-            actual = set(get_registry().names())
-        except ImportError:
-            self.add("C-02", "4 个工具齐备（S4 未完成）", False, "app.tools.registry 不可用")
+            # 通过正式的装配入口注册，检查的是**真实生效的注册表内容**，
+            # 而不是模块里写了哪些常量。两者背离才是真正要抓的问题。
+            register_default_tools()
+            actual = set(registered_names())
+        except Exception as exc:  # noqa: BLE001 —— 任何导入/装配失败都算未通过
+            self.add(
+                "C-02",
+                "4 个工具齐备（S4 未完成）",
+                False,
+                f"工具注册表不可用：{type(exc).__name__}: {exc}",
+            )
             return
 
         missing = expected - actual
+        extra = actual - expected
         self.add(
             "C-02",
             f"{len(expected)} 个工具注册齐备（PROJECT_SPEC §3.2）",
-            not missing,
-            f"缺失={sorted(missing)}",
+            not missing and not extra,
+            f"缺失={sorted(missing)} 多出={sorted(extra)}",
         )
 
     def check_metrics(self) -> None:

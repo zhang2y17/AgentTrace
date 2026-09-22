@@ -67,6 +67,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     register_infrastructure_probes()
 
+    # 注册四个内置工具。契约 §3.3 第 3 条要求节点通过统一注册表发现工具，
+    # 不持有函数引用 —— 因此注册必须发生在任何节点被调用之前。
+    # 注册失败不阻断启动：图会在调用未注册工具时给出明确错误，
+    # 而进程活着可以让 /health 有机会报告问题。
+    try:
+        from app.tools.bootstrap import register_default_tools
+
+        register_default_tools()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "builtin_tools_registration_failed",
+            extra={"error_type": type(exc).__name__},
+        )
+
     # 本地开发与测试时自动建表，省去手动执行 init_db.py。
     # 数据库不可达时**不阻断启动**：进程活着但依赖挂了是可诊断状态，
     # 由 /health 如实报告，而不是让容器反复重启。

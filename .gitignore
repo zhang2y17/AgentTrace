@@ -8,6 +8,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+# pytest 的临时目录与 junit 报告。
+# 用项目内目录而非系统临时目录，是为了绕开某些环境下对系统 temp
+# 的批量删除保护（否则 pytest 清理阶段会报 SystemExit）。
+.pt*/
+junit*.xml
+.j*.xml
 .venv/
 venv/
 *.db
@@ -19,3 +25,9 @@ Thumbs.db
 htmlcov/
 dist/
 build/
+
+# 本地助手工具的工作区元数据（含机器相关的绝对路径与个人笔记），
+# 不属于项目交付物，不应进入公开仓库。
+.workbuddy-ai/
+.claude/
+.cursor/
