@@ -1,0 +1,130 @@
+# AgentTrace 本地开发与演示编排。
+#
+# 契约 T8：Docker Compose 启动 API + PostgreSQL + Redis。
+#
+# 注意：本编排面向**本地开发与演示**，不是生产部署方案
+# （无鉴权、无 TLS、凭据为明文默认值）。详见 README 已知限制。
+
+name: agenttrace
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agenttrace-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agenttrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agenttrace}
+      POSTGRES_DB: ${POSTGRES_DB:-agenttrace}
+      # 初始化时使用 UTF-8，保证中文内容正确存储
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "pg_isready -U ${POSTGRES_USER:-agenttrace} -d ${POSTGRES_DB:-agenttrace}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - agenttrace
+
+  redis:
+    image: redis:7-alpine
+    container_name: agenttrace-redis
+    # 只作短期任务状态使用，设置内存上限避免无限增长。
+    # 契约 T6：不缓存最终答案，因此关闭持久化（--save "" --appendonly no）：
+    # 状态丢了可以重建，保留持久化反而会让"短期状态"变成事实上的长期存储。
+    command:
+      - redis-server
+      - --maxmemory
+      - "128mb"
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - agenttrace
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agenttrace-api
+    # 契约 B8：密钥只从环境变量读取。这里走 env_file + 显式覆盖，
+    # 不把任何密钥写进镜像（.dockerignore 已排除 .env）。
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # 容器内通过服务名访问依赖，覆盖 .env 中的 localhost
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agenttrace}:${POSTGRES_PASSWORD:-agenttrace}@postgres:5432/${POSTGRES_DB:-agenttrace}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # 默认使用测试替身，不访问任何外部模型接口。
+      # 如需真实模型：在 .env 设 LLM_PROVIDER=openai 与 LLM_API_KEY，并从宿主机透传。
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-60}
+      MAX_QUESTION_CHARS: ${MAX_QUESTION_CHARS:-2000}
+      SUMMARY_MAX_CHARS: ${SUMMARY_MAX_CHARS:-500}
+      TOOL_MAX_RETRIES: ${TOOL_MAX_RETRIES:-2}
+      ENVIRONMENT_DOCS: ${ENVIRONMENT_DOCS:-}
+      # 建表与播种由下面的 command 显式完成，关闭应用启动时的自动建表
+      AUTO_CREATE_TABLES: "false"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 先建表再启动服务，避免首次访问时表不存在。
+    # 容器已执行过 init_db/seed_data 时两个脚本都是幂等的，可以安全重复执行。
+    command:
+      - sh
+      - -c
+      - |
+        python scripts/init_db.py --yes || exit 1
+        python scripts/seed_data.py || echo "[warn] 播种失败，服务继续启动（可通过 /health 与日志排查）"
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - agenttrace
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  agenttrace:
+    driver: bridge

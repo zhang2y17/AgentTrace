@@ -50,11 +50,15 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# 默认不跑 integration：它需要真实 PostgreSQL / Redis
-addopts = "-q --strict-markers --strict-config"
+# 默认不跑 integration：它需要真实 PostgreSQL / Redis。
+# 用 addopts 里的 -m "not integration" 实现"默认跳过"，比 skipif 更早生效——
+# 避免在收集阶段就去连接数据库（连接超时会让整个测试套件卡住）。
+addopts = "-q --strict-markers --strict-config -m 'not integration'"
+# 把临时目录放在项目内，避免某些环境下清理系统临时目录受限
+tmp_path_retention_count = 0
 markers = [
     "unit: 纯逻辑测试，无 IO，无网络",
-    "api: FastAPI 接口测试（TestClient + 内存 SQLite）",
+    "api: FastAPI 接口测试（TestClient + SQLite）",
     "smoke: 端到端冒烟测试（进程内完整生命周期）",
     "integration: 需要真实 PostgreSQL / Redis 或真实 LLM，默认跳过",
     "test_double: 明确使用测试替身（Fake LLM / fakeredis）",

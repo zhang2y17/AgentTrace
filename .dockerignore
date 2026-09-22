@@ -1,0 +1,46 @@
+# 构建上下文排除项。
+#
+# 安全要点（ACCEPTANCE_CHECKLIST B-07）：
+# **必须排除 .env**，否则真实密钥会被 COPY 进镜像层，即使后续删除也留在历史层中。
+
+.git
+.gitignore
+.github
+
+# 密钥与本地配置
+.env
+.env.*
+!.env.example
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 本地数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 测试与文档（镜像中不需要）
+tests/
+docs/
+*.md
+!README.md
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 覆盖率与构建产物
+.coverage
+htmlcov/
+dist/
+build/

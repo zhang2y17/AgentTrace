@@ -40,8 +40,11 @@ _REQUEST_ID_STATE_KEY = "agenttrace_request_id"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """应用生命周期。
 
-    S2 阶段只做日志配置。S3 阶段会在此处初始化数据库连接与 Redis 客户端，
-    S5 阶段会在此处建表（本地开发便利），生产场景应改用 init_db.py。
+    - 启动：配置日志、注册基础设施健康探针、按需建表（本地开发便利）；
+    - 关闭：释放数据库引擎连接池。
+
+    契约：生产场景应使用 ``scripts/init_db.py`` 显式建表，
+    本处的自动建表可通过 ``AUTO_CREATE_TABLES=false`` 关闭。
     """
     settings = get_settings()
     configure_logging(settings.log_level, force=True)
@@ -58,7 +61,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "redis_url": settings.safe_redis_url(),
         },
     )
+
+    # 注册数据库 / Redis 健康探针（health.py 保持对基础设施零依赖）
+    from app.api.health_probes import register_infrastructure_probes
+
+    register_infrastructure_probes()
+
+    # 本地开发与测试时自动建表，省去手动执行 init_db.py。
+    # 数据库不可达时**不阻断启动**：进程活着但依赖挂了是可诊断状态，
+    # 由 /health 如实报告，而不是让容器反复重启。
+    if settings.auto_create_tables:
+        try:
+            from app.db.session import create_all_tables
+
+            create_all_tables()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "auto_create_tables_failed",
+                extra={"error_type": type(exc).__name__, "hint": "数据库可能不可达，详见 /health"},
+            )
+
     yield
+
+    from app.db.session import dispose_engine
+
+    dispose_engine()
     logger.info("application_stopping", extra={"app_name": settings.app_name})
 
 

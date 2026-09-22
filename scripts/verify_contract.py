@@ -293,10 +293,15 @@ class ContractVerifier:
         必须放行。因此这里除了检查本行，还检查相邻上下行是否构成禁止语境。
         """
         forbidden = self.lock["forbidden_claims"]
-        # 上下文关键词：出现即说明该行处于"禁止/限制"语义中
+        # 上下文关键词：出现即说明该行处于"禁止/限制/否认"语义中
+        #
+        # 注意 `不代表` / `不用于` 这类**否定前缀**也必须算作放行语境：
+        # README 的免责声明正是"不代表……商业收益"，若不放行会被误判为越权表述。
+        # 这是该检查最容易产生假阳性的地方——免责声明与越权声称在字面上都含同一个词。
         allow_context = re.compile(
             r"禁止|不得|不要写|不要|forbidden|反模式|已知限制|不等于|不编造|不声明|不可|无法|"
-            r"无真实|没有|声明|限制|边界|避免|拒绝|跳过|约束"
+            r"无真实|没有|声明|限制|边界|避免|拒绝|跳过|约束|"
+            r"不代表|不用于|不承诺|不暗示|不构成|不视为|非"
         )
 
         offenders: list[str] = []
@@ -434,6 +439,36 @@ class ContractVerifier:
             f"未文档化={sorted(missing)}",
         )
 
+    def check_deliverable_scripts(self) -> None:
+        """I-10：``init_db.py`` 与 ``seed_data.py`` 必须存在且可被导入。
+
+        只检查"存在 + 语法可解析"（``ast.parse``），**不执行**脚本——
+        执行会连数据库、产生副作用，不适合放进只读的契约检查。
+        但"能被解析"能捕获语法错误这类最容易犯的交付问题。
+        """
+        required = ("scripts/init_db.py", "scripts/seed_data.py")
+        missing: list[str] = []
+        unparsable: list[str] = []
+
+        import ast
+
+        for rel_path in required:
+            abs_path = PROJECT_ROOT / rel_path
+            if not abs_path.exists():
+                missing.append(rel_path)
+                continue
+            try:
+                ast.parse(abs_path.read_text(encoding="utf-8"))
+            except SyntaxError as exc:
+                unparsable.append(f"{rel_path}: {exc}")
+
+        self.add(
+            "I-10",
+            f"交付脚本齐备且语法合法（{len(required)} 个）",
+            not missing and not unparsable,
+            f"缺失={missing} 语法错误={unparsable}",
+        )
+
     # ---------------------------------------------------------------- 主流程
     def run_all(self) -> list[CheckResult]:
         checks = [
@@ -453,6 +488,7 @@ class ContractVerifier:
             self.check_data_source_notes,
             self.check_test_double_marking,
             self.check_settings_env_example,
+            self.check_deliverable_scripts,
         ]
         for check in checks:
             try:

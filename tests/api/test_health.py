@@ -77,7 +77,12 @@ class TestHealthLlmProvider:
         assert body["status"] == HealthStatus.DEGRADED.value
 
     def test_ollama_provider_does_not_require_key(self, monkeypatch) -> None:
-        """本地 Ollama 不需要密钥，不应因此报 degraded。"""
+        """本地 Ollama 不需要密钥，不应因**缺密钥**而报 degraded。
+
+        注意：整体 ``status`` 还可能因其他组件（如本机未启动的 Redis）而降级，
+        因此这里只断言 ``llm_provider`` 组件本身的判定，
+        避免把"Redis 没起"误判成"Ollama 配置有问题"。
+        """
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         get_settings.cache_clear()
@@ -85,8 +90,11 @@ class TestHealthLlmProvider:
         with TestClient(create_app()) as client:
             body = client.get("/health").json()
 
-        assert body["llm_provider"]["status"] == "ok"
-        assert body["status"] == "ok"
+        provider = body["llm_provider"]
+        assert provider["provider"] == "ollama"
+        assert provider["api_key_configured"] is False
+        # 关键断言：不因缺密钥而降级
+        assert provider["status"] == "ok"
 
 
 class TestHealthNoSecretLeak:

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     db_echo: bool = False
     # 建连接超时（秒），避免数据库不可达时请求长时间挂起
     db_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    # 启动时自动建表（本地开发便利）。生产应设为 false 并用 scripts/init_db.py。
+    auto_create_tables: bool = True
 
     # ---------------------------------------------------------------- Redis
     redis_url: str = "redis://localhost:6379/0"

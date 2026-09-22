@@ -38,25 +38,29 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[No
     """为每个测试提供隔离的环境。
 
     - 清除可能影响配置的外部环境变量；
-    - 把工作目录相关的路径指向临时目录，避免测试污染仓库。
+    - 把工作目录切到临时目录，避免测试污染仓库；
+    - 把数据库指向临时 SQLite 文件，**保证默认测试不需要外部 PostgreSQL**；
+    - 禁用启动时自动建表，由各个测试自行按需建表。
 
     注意：本夹具 ``autouse=True``，保证没有测试会意外读到本机真实配置。
     """
-    # 阻止 pytest 从仓库 .env 读到真实配置
     monkeypatch.chdir(tmp_path)
     for key in _ENV_KEYS_TO_CLEAR:
         monkeypatch.delenv(key, raising=False)
 
-    # 显式告知应用处于测试环境
     monkeypatch.setenv("ENVIRONMENT", "test")
     monkeypatch.setenv("LLM_PROVIDER", "fake")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{(tmp_path / 'test.db').as_posix()}")
+    monkeypatch.setenv("AUTO_CREATE_TABLES", "false")
 
     yield
 
-    # 清理配置缓存，避免下一个测试读到上一个测试缓存的 Settings
+    # 清理全局状态：配置缓存与数据库引擎
     from app.core.config import get_settings
+    from app.db.session import dispose_engine
 
     get_settings.cache_clear()
+    dispose_engine()
 
 
 @pytest.fixture
@@ -69,10 +73,37 @@ def settings(isolated_env: None):  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
+def db_session(settings) -> Iterator[object]:  # type: ignore[no-untyped-def]
+    """提供已建表的 SQLite 会话。
+
+    每个测试独立建表与销毁，保证测试之间不相互污染。
+    """
+    from app.db.session import create_all_tables, dispose_engine, get_session_factory
+
+    dispose_engine()
+    create_all_tables()
+
+    session = get_session_factory()()
+    try:
+        yield session
+    finally:
+        session.close()
+        dispose_engine()
+
+
+@pytest.fixture
+def repository(db_session):  # type: ignore[no-untyped-def]
+    """提供 TraceRepository 实例。"""
+    from app.db.repository import TraceRepository
+
+    return TraceRepository(db_session)
+
+
+@pytest.fixture
 def client(settings) -> Iterator[TestClient]:  # type: ignore[no-untyped-def]
     """FastAPI 测试客户端。
 
-    使用 ``with`` 触发 lifespan（日志配置等）。
+    使用 ``with`` 触发 lifespan（日志配置、探针注册、建表）。
     """
     from app.main import create_app
 

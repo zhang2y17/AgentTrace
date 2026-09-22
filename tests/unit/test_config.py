@@ -22,13 +22,32 @@ class TestDefaults:
     """默认值行为。契约 T12：无 .env、无环境变量时必须能构造出配置。"""
 
     def test_loads_without_any_env_config(self, isolated_env: None) -> None:
-        """清空环境后仍能构造 Settings，且关键默认值正确。"""
+        """清空环境后仍能构造 Settings，且关键默认值正确。
+
+        注意：``isolated_env`` 夹具会把 DATABASE_URL 指向临时 SQLite，
+        因此这里断言方言为 sqlite。要验证 PostgreSQL 默认值，
+        见 :meth:`test_default_database_url_is_postgres`。
+        """
         get_settings.cache_clear()
-        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        settings = Settings()  # type: ignore[call-arg]
 
         assert settings.app_name == "agenttrace"
         assert settings.llm_provider == "fake"
         assert settings.environment == "test"
+        # autouse 夹具注入了 SQLite，保证默认测试不依赖外部 PostgreSQL
+        assert settings.database_dialect == "sqlite"
+
+    def test_default_database_url_is_postgres(self, monkeypatch) -> None:
+        """不读环境变量时，默认 DATABASE_URL 必须指向 PostgreSQL。
+
+        这是"开箱即用指向真实数据库"的契约（契约 T5）。
+        注意必须显式删除已被 autouse 夹具注入的 DATABASE_URL，
+        否则读到的是测试用的 SQLite。
+        """
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+        assert "postgresql+psycopg" in settings.database_url
         assert settings.database_dialect == "postgresql"
 
     def test_default_provider_is_test_double(self, isolated_env: None) -> None:
